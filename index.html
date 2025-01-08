@@ -1,1098 +1,582 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Classic Space Invaders</title>
-    <style>
-        body {
-            margin: 0;
-            background-color: black;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-            color: white;
-            position: relative;
-        }
-        #gameCanvas {
-            display: block;
-            margin: 0 auto;
-            background-color: #000;
-        }
-        /* Overlay Styles */
-        .overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.85);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            flex-direction: column;
-            z-index: 2;
-        }
-        .hidden {
-            display: none;
-        }
-        button {
-            padding: 10px 20px;
-            margin-top: 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #444;
-            border: none;
-            color: white;
-        }
-        button:hover {
-            background-color: #666;
-        }
-        /* Explosion Animation */
-        .explosion {
-            position: absolute;
-            border: 2px solid red;
-            border-radius: 50%;
-            animation: explode 0.5s forwards;
-            pointer-events: none;
-            z-index: 3;
-        }
-        @keyframes explode {
-            from {
-                width: 10px;
-                height: 10px;
-                opacity: 1;
-            }
-            to {
-                width: 50px;
-                height: 50px;
-                opacity: 0;
-            }
-        }
-    </style>
+<meta charset="utf-8">
+<title>Pong: Instructions, Pause, Scatter, Acceleration, & Fireworks</title>
+<style>
+  body {
+    background: linear-gradient(120deg, #ff8a80, #8c9eff);
+    margin: 0;
+    overflow: hidden;
+  }
+  #gameCanvas {
+    background: #333;
+    border: 4px solid #fff;
+    display: block;
+    margin: 40px auto;
+    box-shadow: 0 0 20px rgba(0,0,0,0.7);
+  }
+  #score {
+    position: absolute;
+    top: 10px;
+    width: 100%;
+    text-align: center;
+    color: #fff;
+    font-size: 24px;
+    font-family: sans-serif;
+    z-index: 2;
+  }
+  #countdownMsg {
+    position: absolute;
+    top: 50px;
+    width: 100%;
+    text-align: center;
+    color: #fff;
+    font-size: 24px;
+    font-family: sans-serif;
+    z-index: 2;
+  }
+  #instructionsOverlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    font-family: sans-serif;
+    display: flex; 
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 3; 
+  }
+  #instructionsOverlay.hidden {
+    display: none;
+  }
+  /* Fireworks message styling */
+  #winnerMsg {
+    position: absolute;
+    top: 40%;
+    width: 100%;
+    text-align: center;
+    color: #ffea00;
+    font-size: 36px;
+    font-weight: bold;
+    font-family: sans-serif;
+    text-shadow: 2px 2px 5px #000;
+    z-index: 4;
+    display: none;
+  }
+</style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+<canvas id="gameCanvas" width="800" height="400"></canvas>
+<div id="score"></div>
+<div id="countdownMsg"></div>
 
-    <!-- Overlays -->
-    <div id="startOverlay" class="overlay">
-        <h1>Space Invaders</h1>
-        <p>Press <strong>Spacebar</strong> to Start</p>
-    </div>
+<!-- Instructions overlay -->
+<div id="instructionsOverlay">
+  <h1>Welcome to Pong!</h1>
+  <p>Left Paddle: W (up) / S (down)</p>
+  <p>Right Paddle: O (up) / L (down)</p>
+  <p>Press P to pause/unpause.</p>
+  <p>Press H to show/hide these instructions (and pause).</p>
+  <p>Press Enter or Space to begin (or resume) play.</p>
+</div>
 
-    <div id="directionsOverlay" class="overlay hidden">
-        <h2>Controls</h2>
-        <p>←: Move Left</p>
-        <p>→: Move Right</p>
-        <p><strong>Ctrl</strong>: Fire</p>
-        <p><strong>Spacebar</strong>: Pause/Unpause</p>
-        <p><strong>H</strong>: Instructions (also pauses the game)</p>
-        <p><strong>Esc</strong>: End Game</p>
-        <button onclick="toggleDirections()">Close</button>
-    </div>
+<!-- Winner message -->
+<div id="winnerMsg"></div>
 
-    <!-- Sound Elements -->
-    <audio id="fireSound" src="shoot.wav"></audio>
-    <audio id="enemyHitSound" src="invaderkilled.wav"></audio>
-    <audio id="playerHitSound" src="explosion.wav"></audio>
-    <audio id="explosionSound" src="invaderkilled.wav"></audio>
-    <audio id="gameOverSound" src="explosion.wav"></audio>
-    <audio id="mothershipHitSound" src="explosion.wav"></audio>
-    <audio id="mothershipAppearSound" src="ufo_lowpitch.wav"></audio>
-    <audio id="fireworksSound" src="sounds/fireworks.mp3"></audio>
+<script>
+// -----------------------------------------------------------------------------
+//  SOUND / AUDIO 
+// -----------------------------------------------------------------------------
+const paddleHitSound = new Audio("https://www.myinstants.com/media/sounds/smw_jump.wav");
+const scoreSound     = new Audio("https://www.myinstants.com/media/sounds/smb_mariodie.wav");
 
-    <script>
-        const mothershipImage = new Image();
-        mothershipImage.src = 'saucer@2x.png'; // Preload mothership image
-        const playerImage = new Image();
-        playerImage.src = 'play@2x.png'; // Preload player image
+// -----------------------------------------------------------------------------
+//  CANVAS / CONTEXT
+// -----------------------------------------------------------------------------
+let canvas = document.getElementById('gameCanvas');
+let ctx = canvas.getContext('2d');
 
-        const shieldImage = new Image();
-        shieldImage.src = 'shield@2x.png'; // Replace with the actual path to your shield image
+// -----------------------------------------------------------------------------
+//  GAME CONSTANTS
+// -----------------------------------------------------------------------------
+const PADDLE_WIDTH     = 10;
+const PADDLE_HEIGHT    = 70;
+const PADDLE_MOVE_SPEED= 5;  // For smooth movement
+const BALL_RADIUS      = 8;
+const BASE_SPEED_X     = 3;
+const BASE_SPEED_Y     = 2;
+const WINNING_SCORE    = 20; // End the game when a player reaches this
+const FIREWORKS_COUNT  = 10; // Number of separate firework bursts
 
-        const alienImages = {
-            1: [new Image(), new Image()], // Alien 1
-            2: [new Image(), new Image()], // Alien 2
-            3: [new Image(), new Image()], // Alien 3
-            4: [new Image(), new Image()], // Alien 4
-            5: [new Image(), new Image()], // Alien 5
-            6: [new Image(), new Image()]  // Alien 6
-        };
-        
-        // Preload images
-        alienImages[1][0].src = 'inv11@2x.png';
-        alienImages[1][1].src = 'inv12@2x.png';
-        alienImages[2][0].src = 'inv11@2x.png';
-        alienImages[2][1].src = 'inv12@2x.png';
-        alienImages[3][0].src = 'inv31@2x.png';
-        alienImages[3][1].src = 'inv32@2x.png';
-        alienImages[4][0].src = 'inv31@2x.png'; 
-        alienImages[4][1].src = 'inv32@2x.png';
-        alienImages[5][0].src = 'inv21@2x.png';
-        alienImages[5][1].src = 'inv22@2x.png';
-        alienImages[6][0].src = 'inv21@2x.png';
-        alienImages[6][1].src = 'inv22@2x.png';
+// -----------------------------------------------------------------------------
+//  GAME STATE
+// -----------------------------------------------------------------------------
+let leftScore  = 0;
+let rightScore = 0;
+let leftY, rightY;
+let paddleVelocityLeft  = 0;
+let paddleVelocityRight = 0;
 
-        const invaderSounds = [
-            new Audio('fastinvader1.wav'),
-            new Audio('fastinvader2.wav'),
-            new Audio('fastinvader3.wav'),
-            new Audio('fastinvader4.wav')
-        ];
-        let currentInvaderSound = 0; // Tracks which sound to play
-        let stepDelay = 800; // Starting delay in milliseconds for step movement
-        let lastStepTime = 0; // Tracks last step time
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+let ballX, ballY;
+let ballSpeedX, ballSpeedY;
+let hideBall   = true;
+let volleyCount= 0; // counts successful paddle hits
+let gameStopped= false;
+let gamePaused = true;
+let instructionsVisible = true;
+let nextReceiver   = '';
+let countdown      = 0;
+let countdownTimer = null;
 
-        const startOverlay = document.getElementById('startOverlay');
-        const directionsOverlay = document.getElementById('directionsOverlay');
+// Scattering
+let scattering   = false;
+let scatterTimer = 0;
+let particles    = [];
 
-        const GAME_WIDTH = canvas.width;
-        const GAME_HEIGHT = canvas.height;
+// Fireworks
+let gameOver      = false;  // If true, game is locked until key is pressed
+let fireworks     = [];
+let winnerMsgDiv  = document.getElementById('winnerMsg');
 
-        let keys = {};
-        let gameState = 'start'; // 'start', 'playing', 'paused', 'countdown', 'gameover'
-        let spacePressed = false;
+// DOM references
+let instructionsOverlay = document.getElementById('instructionsOverlay');
 
-        let playerRespawning = false; // Tracks if the player is in respawn mode
-        let respawnCountdown = 3;     // Countdown timer for respawn (in seconds)
-        let respawnStartTime = null;  // Tracks when the respawn countdown started
-
-        // Sound Effects
-        const fireSound = document.getElementById('fireSound');
-        const enemyHitSound = document.getElementById('enemyHitSound');
-        const playerHitSound = document.getElementById('playerHitSound');
-        const explosionSound = document.getElementById('explosionSound');
-        const gameOverSound = document.getElementById('gameOverSound');
-        const mothershipHitSound = document.getElementById('mothershipHitSound');
-        const mothershipAppearSound = document.getElementById('mothershipAppearSound');
-        const fireworksSound = document.getElementById('fireworksSound');
-
-        // Player
-        const playerWidth = 40;
-        const playerHeight = 20;
-         
-
-        // Enemies
-        const enemyRows = 6;
-        const enemyCols = 10;
-        const enemyWidth = 40;
-        const enemyHeight = 30;
-        const enemyPadding = 20;
-        let enemies = [];
-        let enemyDirection = 1; // 1: right, -1: left
-        let enemySpeed = 1;
-        let initialEnemyCount = enemyRows * enemyCols;
-
-        // Enemy Bullets
-        const bulletWidth = 5;
-        const bulletHeight = 10;
-        const bulletSpeed = 5;
-        let enemyBullets = [];
-
-        // Player Bullets
-        const playerBulletSpeed = 7;
-
-        // Shields
-        const shieldWidth = 100;
-        const shieldHeight = 50;
-        const shieldCount = 3;
-        const shieldSpacing = (GAME_WIDTH - (shieldCount * shieldWidth)) / (shieldCount + 1);
-        let shields = [];
-
-        // Explosion Effects
-        let explosions = [];
-
-        // Fireworks
-        let fireworks = [];
-
-        // Motherships
-        let motherships = [];
-        const mothershipInterval = 30000; // Every 30 seconds
-        let lastMothershipTime = Date.now();
-
-        // Game variables
-        let score = 0;
-        let gameOver = false;
-
-        // Level variables
-        let currentLevel = 1;
-        let countdownStartTime = null;
-        const countdownDuration = 3000; // 3 seconds in ms
-
-        // Colors for each enemy row
-        const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
-
-function tintImage(image, color) {
-    const offCanvas = document.createElement('canvas');
-    const offCtx = offCanvas.getContext('2d');
-
-    // Match image dimensions
-    offCanvas.width = image.width;
-    offCanvas.height = image.height;
-
-    // Draw the base image
-    offCtx.drawImage(image, 0, 0);
-
-    // Apply tint color
-    offCtx.globalCompositeOperation = 'source-atop';
-    offCtx.fillStyle = color;
-    offCtx.fillRect(0, 0, image.width, image.height);
-
-    return offCanvas; // Return the tinted version
+// -----------------------------------------------------------------------------
+//  INITIALIZATION
+// -----------------------------------------------------------------------------
+function resetPositions() {
+  leftY  = canvas.height/2 - PADDLE_HEIGHT/2;
+  rightY = canvas.height/2 - PADDLE_HEIGHT/2;
 }
-function initEnemies(level) {
-    enemies = [];
-    const baseY = 50;
-    const rowHeight = enemyHeight + enemyPadding;
 
-    for (let row = 0; row < enemyRows; row++) {
-        for (let col = 0; col < enemyCols; col++) {
-            let enemyX = 60 + col * (enemyWidth + enemyPadding);
-            let enemyY = baseY + row * rowHeight;
+// Serve countdown
+function startServe(scorer) {
+  if (scorer === 'left') {
+    nextReceiver = 'right';
+  } else if (scorer === 'right') {
+    nextReceiver = 'left';
+  } else {
+    nextReceiver = Math.random() < 0.5 ? 'left' : 'right';
+  }
+  hideBall   = true;
+  gamePaused = true;
+  countdown  = 4;
 
-            const alienType = (row % 6) + 1; // Cycles through 6 types
-            enemies.push({
-                x: enemyX,
-                y: enemyY,
-                width: enemyWidth,
-                height: enemyHeight,
-                type: alienType, // Alien type (1 to 6)
-                frame: 0,        // Animation frame (0 or 1)
-                alive: true,
-                explosionTimer: 0
-            });
-        }
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    countdown--;
+    if (countdown <= 0) {
+      clearInterval(countdownTimer);
+      countdown = 0;
+      gamePaused = false;
+      placeBall();
     }
-
-    enemyDirection = 1; // Reset direction
-    enemySpeed = 1;     // Reset speed
-    initialEnemyCount = enemyRows * enemyCols;
+  }, 1000);
 }
 
-        // Initialize Shields
-function initShields() {
-    shields = [];
-    for (let i = 0; i < shieldCount; i++) {
-        let shieldX = shieldSpacing + i * (shieldWidth + shieldSpacing);
-        let shieldY = GAME_HEIGHT - playerHeight - shieldHeight - 50    ;
-        shields.push({
-            x: shieldX,
-            y: shieldY,
-            width: shieldWidth,
-            height: shieldHeight,
-            segments: createShieldSegments(shieldWidth, shieldHeight, 5, 4) // 5 rows, 4 columns
-        });
-    }
+function placeBall() {
+  ballX = canvas.width/2;
+  ballY = canvas.height/2;
+  volleyCount = 0;
 
-    // Initialize player after shields are set
-    let middleShield = shields[Math.floor(shields.length / 2)]; // Get the middle shield
-    player = {
-        x: middleShield.x + middleShield.width / 2 - playerWidth / 2, // Centered under the middle shield
-        y: middleShield.y + shieldHeight + 40, // 30 pixels below shield level
-        width: playerWidth,
-        height: playerHeight,
-        speed: 5,
-        color: 'green',
-        bullets: [],
-        lives: 3,
-        isExploding: false,
-        explosionTimer: 0
-    };
+  let dir = (nextReceiver === 'left') ? -1 : 1;
+  ballSpeedX = BASE_SPEED_X * dir;
+  ballSpeedY = Math.random() < 0.5 ? -BASE_SPEED_Y : BASE_SPEED_Y;
+
+  hideBall = false;
 }
 
+// -----------------------------------------------------------------------------
+//  SCATTER EFFECT WHEN SCORING
+// -----------------------------------------------------------------------------
+function scatterBall(x, y) {
+  scattering  = true;
+  scatterTimer= 60; // about 1 second at 60fps
+  hideBall    = true;
+  particles   = [];
 
-
-        // Create shield segments as a grid
-        function createShieldSegments(width, height, rows, cols) {
-            let segments = [];
-            const segmentWidth = width / cols;
-            const segmentHeight = height / rows;
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    segments.push({
-                        x: c * segmentWidth,
-                        y: r * segmentHeight,
-                        width: segmentWidth,
-                        height: segmentHeight,
-                        intact: true
-                    });
-                }
-            }
-            return segments;
-        }
-
-        initEnemies(currentLevel);
-        initShields();
-
-        // Event Listeners
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
-                if (!spacePressed) {
-                    spacePressed = true;
-                    if (gameState === 'start') {
-                        startGame();
-                        return;
-                    }
-                    if (gameState === 'playing' || gameState === 'paused') {
-                        togglePause();
-                        return;
-                    }
-                }
-            }
-            keys[e.code] = true;
-
-            if (gameState === 'playing') {
-                if (e.code === 'KeyH') {
-                    toggleDirections();
-                }
-                if (e.code === 'Escape') {
-                    endGame();
-                }
-            }
-        });
-
-        document.addEventListener('keyup', (e) => {
-            if (e.code === 'Space') {
-                spacePressed = false;
-            }
-            keys[e.code] = false;
-
-            // Reset fired flag for firing keys
-            if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
-                keys['ControlFired'] = false;
-            }
-        });
-
-        function toggleDirections() {
-            if (directionsOverlay.classList.contains('hidden')) {
-                directionsOverlay.classList.remove('hidden');
-                if (gameState === 'playing') {
-                    gameState = 'paused';
-                }
-            } else {
-                directionsOverlay.classList.add('hidden');
-                if (gameState === 'paused') {
-                    gameState = 'playing';
-                    gameLoop(); // Resume the game loop when closing directions
-                }
-            }
-        }
-
-        function startGame() {
-            startOverlay.classList.add('hidden');
-            gameState = 'playing';
-            gameLoop();
-        }
-
-        function pauseGame() {
-            gameState = 'paused';
-        }
-
-        function resumeGame() {
-            gameState = 'playing';
-            gameLoop();
-        }
-
-        function togglePause() {
-            if (gameState === 'playing') {
-                pauseGame();
-            } else if (gameState === 'paused') {
-                resumeGame();
-            }
-        }
-
-        function endGame() {
-            const confirmEnd = confirm('Are you sure you want to end the game?');
-            if (confirmEnd) {
-                gameState = 'gameover';
-                showGameOver();
-            }
-        }
-
-        function showGameOver() {
-            gameOverSound.play();
-            alert(`Game Over!\nYour Score: ${score}`);
-            document.location.reload();
-        }
-
-        // Game Loop
-        function gameLoop() {
-            update();
-            draw();
-            if (!gameOver && (gameState === 'playing' || gameState === 'countdown')) {
-                requestAnimationFrame(gameLoop);
-            }
-        }
-
-        // Update Game State
-        function update() {
-        if (playerRespawning) {
-            // Update explosions while paused
-            explosions.forEach((explosion, index) => {
-                explosion.x += explosion.vx;
-                explosion.y += explosion.vy;
-                explosion.vx *= 0.98;
-                explosion.vy *= 0.98;
-                explosion.size *= 0.95;
-                explosion.timer--;
-                if (explosion.timer <= 0 || explosion.size < 0.5) {
-                    explosions.splice(index, 1);
-                }
-            });
-        
-            // Countdown Timer
-            const elapsed = Date.now() - respawnStartTime;
-            respawnCountdown = 3 - Math.floor(elapsed / 1000);
-        
-            // Respawn when countdown ends
-            if (elapsed >= 3000) {
-                playerRespawning = false;
-                player.isExploding = false;
-                player.x = GAME_WIDTH / 2 - playerWidth / 2; // Reset position
-                player.y = GAME_HEIGHT - playerHeight - 40; // Keep it aligned
-            }
-        
-            return; // Skip all other updates during countdown
-        }
-
-            if (gameState === 'countdown') {
-                const elapsed = Date.now() - countdownStartTime;
-            
-                // Transition to next level after countdown
-                if (elapsed >= countdownDuration) {
-                    startNextLevel(); // Moves to the next level
-                }
-                return; // Exit update to prevent further processing
-            }
-
-
-
-            if (gameState !== 'playing') return;
-
-            // Player Movement
-            if (keys['ArrowLeft'] && player.x > 0) {
-                player.x -= player.speed;
-            }
-            if (keys['ArrowRight'] && player.x + playerWidth < GAME_WIDTH) {
-                player.x += player.speed;
-            }
-
-            // Fire Player Bullet
-            if ((keys['ControlLeft'] || keys['ControlRight']) && !keys['ControlFired']) {
-                player.bullets.push({
-                    x: player.x + player.width / 2 - 2.5, // Centered bullet
-                    y: player.y,
-                    width: 5,
-                    height: 15,
-                    color: 'yellow'
-                });
-                fireSound.currentTime = 0;
-                fireSound.play();
-                keys['ControlFired'] = true;
-            }
-
-            // Update Player Bullets
-            player.bullets.forEach((bullet, index) => {
-                bullet.y -= playerBulletSpeed;
-                // Remove bullet if it goes off screen
-                if (bullet.y + bullet.height < 0) {
-                    player.bullets.splice(index, 1);
-                } else {
-                    let hit = false;
-
-                    // Check collision with enemies
-                    enemies.forEach((enemy, eIndex) => {
-                        if (enemy.alive && isColliding(bullet, enemy)) {
-                            enemy.alive = false;
-                            enemyHitSound.currentTime = 0;
-                            enemyHitSound.play();
-                            player.bullets.splice(index, 1);
-                            score += 10;
-                            createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
-                            // Adjust enemy speed based on remaining enemies
-                            adjustEnemySpeed();
-                            hit = true;
-                        }
-                    });
-
-                    if (hit) return; // Bullet already handled
-
-                    // Check collision with shields
-                    shields.forEach((shield) => {
-                        shield.segments.forEach((segment) => {
-                            if (segment.intact && isColliding(bullet, {
-                                x: shield.x + segment.x,
-                                y: shield.y + segment.y,
-                                width: segment.width,
-                                height: segment.height
-                            })) {
-                                segment.intact = false;
-                                player.bullets.splice(index, 1);
-                                hit = true;
-                            }
-                        });
-                    });
-
-                    if (hit) return; // Bullet already handled
-
-                    // Check collision with motherships
-                    motherships.forEach((mothership, mIndex) => {
-                        if (mothership.alive && isColliding(bullet, mothership)) {
-                            let points = 0;
-                            if (mothership.speed < 2) {
-                                points = 50;
-                            } else if (mothership.speed >= 2 && mothership.speed < 4) {
-                                points = 100;
-                            } else if (mothership.speed >= 4 && mothership.speed < 6) {
-                                points = 200;
-                            } else if (mothership.speed >= 6 && mothership.speed < 8) {
-                                points = 300;
-                            } else {
-                                points = 500;
-                                player.lives += 1;
-                            }
-                            score += points;
-                            mothership.alive = false;
-                            mothershipHitSound.currentTime = 0;
-                            mothershipHitSound.play();
-                            player.bullets.splice(index, 1);
-                            createExplosion(mothership.x + mothership.width / 2, mothership.y + mothership.height / 2);
-                            hit = true;
-                        }
-                    });
-                }
-            });
-
-            // Calculate enemy speed based on the number of remaining enemies
-            enemySpeed = calculateEnemySpeed();
-
-            // Move enemies in 'step' fashion
-const now = Date.now();
-if (now - lastStepTime > stepDelay) {
-    let shouldMoveDown = false;
-
-    enemies.forEach(enemy => {
-        if (enemy.alive) {
-            enemy.x += (enemyWidth / 2) * enemyDirection; // Half-step horizontal movement
-            enemy.frame = 1 - enemy.frame; // Toggle frame for animation
-
-            if (enemy.x + enemy.width >= GAME_WIDTH || enemy.x <= 0) {
-                shouldMoveDown = true;
-            }
-        }
+  for (let i=0; i<20; i++) {
+    let angle = Math.random() * 2*Math.PI;
+    let speed = 2 + Math.random()*3;
+    particles.push({
+      x: x,
+      y: y,
+      vx: Math.cos(angle)*speed,
+      vy: Math.sin(angle)*speed,
+      alpha: 1.0
     });
-
-    if (shouldMoveDown) {
-        enemyDirection *= -1;
-        enemies.forEach(enemy => {
-            if (enemy.alive) {
-                enemy.y += enemyHeight / 4; // Half-step vertical movement
-            }
-        });
-    }
-
-    // Play step sound and cycle
-    invaderSounds[currentInvaderSound].currentTime = 0;
-    invaderSounds[currentInvaderSound].play();
-    currentInvaderSound = (currentInvaderSound + 1) % invaderSounds.length;
-
-    lastStepTime = now;
-    adjustStepSpeed(); // Update speed based on enemies
+  }
 }
 
-
-            // Check collision between enemies and shields
-            enemies.forEach(enemy => {
-                if (enemy.alive) {
-                    shields.forEach(shield => {
-                        shield.segments.forEach(segment => {
-                            if (segment.intact && isColliding(enemy, {
-                                x: shield.x + segment.x,
-                                y: shield.y + segment.y,
-                                width: segment.width,
-                                height: segment.height
-                            })) {
-                                segment.intact = false;
-                            }
-                        });
-                    });
-                }
-            });
-
-            // Fire Enemy Bullets
-            if (Math.random() < 0.005) { // Adjusted firing frequency
-                const aliveEnemies = enemies.filter(e => e.alive);
-                if (aliveEnemies.length > 0) {
-                    const shooter = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
-                    enemyBullets.push({
-                        x: shooter.x + shooter.width / 2 - bulletWidth / 2,
-                        y: shooter.y + shooter.height,
-                        width: bulletWidth,
-                        height: bulletHeight,
-                        color: 'white'
-                    });
-                }
-            }
-
-            // Update Enemy Bullets
-            enemyBullets.forEach((bullet, index) => {
-                bullet.y += bulletSpeed;
-                // Remove bullet if it goes off screen
-                if (bullet.y > GAME_HEIGHT) {
-                    enemyBullets.splice(index, 1);
-                } else {
-                    let hit = false;
-
-                    // Check collision with shields
-                    shields.forEach((shield) => {
-                        shield.segments.forEach((segment) => {
-                            if (segment.intact && isColliding(bullet, {
-                                x: shield.x + segment.x,
-                                y: shield.y + segment.y,
-                                width: segment.width,
-                                height: segment.height
-                            })) {
-                                segment.intact = false;
-                                enemyBullets.splice(index, 1);
-                                hit = true;
-                            }
-                        });
-                    });
-
-                    if (hit) return; // Bullet already handled
-
-                    // Check collision with player
-                    if (isColliding(bullet, player) && !player.isExploding) {
-                        enemyBullets.splice(index, 1);
-                        playerHitSound.currentTime = 0;
-                        playerHitSound.play();
-                        createExplosion(player.x + player.width / 2, player.y + player.height / 2);
-                        player.lives -= 1;
-                        if (player.lives > 0) {
-                            resetPlayer();
-                        } else {
-                            gameOver = true;
-                            showGameOver();
-                        }
-                    }
-                }
-            });
-
-            // Update Motherships
-            motherships.forEach((mothership, mIndex) => {
-                if (mothership.alive) {
-                    mothership.x += mothership.speed;
-                    // Remove mothership if it goes off screen
-                    if (mothership.direction === 'right' && mothership.x > GAME_WIDTH) {
-                        mothership.alive = false;
-                    } else if (mothership.direction === 'left' && mothership.x + mothership.width < 0) {
-                        mothership.alive = false;
-                    }
-                }
-            });
-
-            // Spawn Motherships
-            if (Date.now() - lastMothershipTime > mothershipInterval) {
-                spawnMothership();
-                lastMothershipTime = Date.now();
-            }
-
-// Update Explosions
-explosions.forEach((explosion, index) => {
-    explosion.x += explosion.vx; // Move horizontally
-    explosion.y += explosion.vy; // Move vertically
-
-    // Apply slight slowdown effect (friction)
-    explosion.vx *= 0.98;
-    explosion.vy *= 0.98;
-
-    // Gradually shrink particle size
-    explosion.size *= 0.95;
-
-    // Reduce timer
-    explosion.timer--;
-
-    // Remove particles when their timer expires or they become too small
-    if (explosion.timer <= 0 || explosion.size < 0.5) {
-        explosions.splice(index, 1);
+function updateParticles() {
+  scatterTimer--;
+  if (scatterTimer<=0) {
+    scattering = false;
+    // After scattering, check if game is over, else new serve
+    if (!gameOver) {
+      resetPositions();
+      startServe(null);
     }
-});
-
-
-            // Update Fireworks
-            fireworks.forEach((firework, index) => {
-                firework.timer--;
-                firework.particles.forEach((particle) => {
-                    particle.x += particle.vx;
-                    particle.y += particle.vy;
-                    particle.vy += particle.gravity;
-                });
-                if (firework.timer <= 0) {
-                    fireworks.splice(index, 1);
-                }
-            });
-
-            // Check Win Condition
-            if (enemies.every(e => !e.alive)) {
-                createFireworks();
-                gameState = 'countdown';
-                countdownStartTime = Date.now();
-            }
-        }
-function adjustStepSpeed() {
-    const remainingEnemies = enemies.filter(enemy => enemy.alive).length;
-    const totalEnemies = enemyRows * enemyCols;
-
-    if (remainingEnemies === 1) {
-        stepDelay = 200 / 3; // 200% faster for the last enemy
-    } else if (remainingEnemies <= totalEnemies / 4) {
-        stepDelay = 300 * 0.8; // Speed 3 increased by 20%
-    } else if (remainingEnemies <= totalEnemies / 2) {
-        stepDelay = 500; // Speed 2 unchanged
-    } else if (remainingEnemies <= (3 * totalEnemies) / 4) {
-        stepDelay = 650; // Speed 1 unchanged
-    } else {
-        stepDelay = 800; // Starting speed
+  } else {
+    // Move & fade each particle
+    for (let p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.alpha -= 0.02;
     }
+  }
 }
 
-
-        // Draw Game State
-        function draw() {
-            // Clear fireworks before drawing new frames
-            fireworks = fireworks.filter(firework => firework.timer > 0);
-            // Clear Canvas
-            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-            if (playerRespawning) {
-                // Dim the screen
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-            
-                // Draw explosions while paused
-                explosions.forEach(explosion => {
-                    ctx.fillStyle = explosion.color;
-                    ctx.beginPath();
-                    ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-            
-                // Display countdown text
-                ctx.fillStyle = 'white';
-                ctx.font = '48px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(`Respawning in ${respawnCountdown}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
-            
-                return; // Skip drawing the rest during countdown
-            }
-            if (gameState === 'start') {
-                // Dim screen handled by overlay
-                return;
-            }
-
-            if (gameState === 'countdown') {
-                const now = Date.now();
-                const elapsed = now - countdownStartTime;
-                let remaining = 3 - Math.floor(elapsed / 1000);
-                if (remaining < 0) remaining = 0;
-
-                // Draw Fireworks
-                fireworks.forEach(firework => {
-                    firework.particles.forEach(particle => {
-                        ctx.fillStyle = particle.color;
-                        ctx.beginPath();
-                        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-                        ctx.fill();
-                    });
-                });
-
-                // Draw Countdown Overlay
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
-                ctx.fillStyle = 'white';
-                ctx.font = '30px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(`Level ${currentLevel + 1} starting in ${remaining}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
-                ctx.textAlign = 'left';
-                return;
-            }
-
-            // Draw Player with Image
-            if (!player.isExploding) {
-                if (playerImage.complete && playerImage.naturalHeight !== 0) {
-                    ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
-                } else {
-                    // Fallback placeholder if image is not loaded
-                    ctx.fillStyle = 'green';
-                    ctx.fillRect(player.x, player.y, player.width, player.height);
-                }
-            }
-
-
-            // Draw Player Bullets
-            player.bullets.forEach(bullet => {
-                ctx.fillStyle = bullet.color;
-                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-            });
-
-            // Draw Enemies
-            // Draw Enemies with Animation Frames
-            enemies.forEach(enemy => {
-                if (enemy.alive) {
-                    const img = alienImages[enemy.type][enemy.frame]; // Select image by type and frame
-                    
-                    // Ensure the image is loaded before drawing
-                    if (img.complete && img.naturalHeight !== 0) {
-                        ctx.drawImage(img, enemy.x, enemy.y, enemy.width, enemy.height); // Draw alien image
-                    } else {
-                        // Fallback placeholder if image is not loaded
-                        ctx.fillStyle = 'white';
-                        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-                    }
-                }
-            });
-
-
-
-            // Draw Enemy Bullets
-            enemyBullets.forEach(bullet => {
-                ctx.fillStyle = bullet.color;
-                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-            });
-
-// Draw Shields with Image Masking
-shields.forEach(shield => {
-    shield.segments.forEach(segment => {
-        if (segment.intact) {
-            // Draw intact part of the shield using the image
-            if (shieldImage.complete && shieldImage.naturalHeight !== 0) {
-                ctx.drawImage(
-                    shieldImage, // Source image
-                    shield.x + segment.x, // X position
-                    shield.y + segment.y, // Y position
-                    segment.width, // Width
-                    segment.height // Height
-                );
-            } else {
-                // Fallback if image isn't loaded
-                ctx.fillStyle = 'green';
-                ctx.fillRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
-            }
-        } else {
-            // Damaged segment - Render transparency to simulate a 'chip'
-            ctx.clearRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
-        }
-    });
-});
-
-            // Draw Motherships
-            motherships.forEach(mothership => {
-                if (mothership.alive) {
-                    if (mothershipImage.complete && mothershipImage.naturalHeight !== 0) {
-                        ctx.drawImage(mothershipImage, mothership.x, mothership.y, mothership.width, mothership.height);
-                    } else {
-                        // Fallback to rectangle if image is not ready
-if (mothershipImage.complete && mothershipImage.naturalHeight !== 0) {
-    ctx.drawImage(mothershipImage, mothership.x, mothership.y, mothership.width, mothership.height);
-} else {
-    // Fallback to rectangle if image is not ready
-    ctx.fillStyle = 'purple';
-    ctx.fillRect(mothership.x, mothership.y, mothership.width, mothership.height);
-}
-                    }
-                    // Optional: Add more details to mothership
-                }
-            });
-
-// Draw Scatter Explosions
-explosions.forEach(explosion => {
-    ctx.fillStyle = explosion.color; // Random color per particle
+function drawParticles() {
+  for (let p of particles) {
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle   = '#fff';
     ctx.beginPath();
-    ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 3, 0, Math.PI*2);
     ctx.fill();
+  }
+  ctx.globalAlpha = 1.0;
+}
+
+// -----------------------------------------------------------------------------
+//  FIREWORKS WHEN GAME ENDS
+// -----------------------------------------------------------------------------
+function startFireworks(winner) {
+  // Show winner message
+  winnerMsgDiv.textContent = winner + " WINS!";
+  winnerMsgDiv.style.display = 'block';
+  fireworks = [];
+
+  // Make N random bursts
+  for (let i=0; i<FIREWORKS_COUNT; i++) {
+    createFireworkBurst();
+  }
+}
+
+function createFireworkBurst() {
+  // A single burst with 30 sparks
+  let x     = Math.random() * canvas.width;
+  let y     = Math.random() * (canvas.height*0.7);
+  let sparks= [];
+  for (let i=0; i<30; i++) {
+    let angle = Math.random() * 2*Math.PI;
+    let speed = 2 + Math.random()*3;
+    sparks.push({
+      x: x,
+      y: y,
+      vx: Math.cos(angle)*speed,
+      vy: Math.sin(angle)*speed,
+      alpha: 1.0,
+      color: randomColor()
+    });
+  }
+  fireworks.push(sparks);
+}
+
+function updateFireworks() {
+  // Simple random perpetual fireworks
+  // fade each spark, remove if alpha < 0
+  // if a burst is out of sparks, create a new burst
+  for (let s=0; s<fireworks.length; s++) {
+    let sparks = fireworks[s];
+    for (let p of sparks) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.alpha -= 0.02;
+    }
+    // Filter out invisible sparks
+    sparks = sparks.filter(sp => sp.alpha>0);
+    // If that burst ended, re-create it
+    if (sparks.length===0) {
+      createFireworkBurst();
+      fireworks[s] = [];
+    } else {
+      fireworks[s] = sparks;
+    }
+  }
+}
+
+function drawFireworks() {
+  for (let sparks of fireworks) {
+    for (let p of sparks) {
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha=1.0;
+}
+
+function randomColor() {
+  const r = Math.floor(Math.random()*256);
+  const g = Math.floor(Math.random()*256);
+  const b = Math.floor(Math.random()*256);
+  return `rgb(${r},${g},${b})`;
+}
+
+// -----------------------------------------------------------------------------
+//  MAIN GAME LOOP
+// -----------------------------------------------------------------------------
+function moveEverything() {
+  if (gameStopped || gamePaused || scattering || gameOver) return;
+
+  // Smooth paddle movement
+  leftY  += paddleVelocityLeft;
+  rightY += paddleVelocityRight;
+
+  // Keep paddles in bounds
+  if (leftY<0) leftY=0;
+  if (leftY>canvas.height-PADDLE_HEIGHT) leftY = canvas.height-PADDLE_HEIGHT;
+  if (rightY<0) rightY=0;
+  if (rightY>canvas.height-PADDLE_HEIGHT) rightY = canvas.height-PADDLE_HEIGHT;
+
+  // Move ball
+  ballX += ballSpeedX;
+  ballY += ballSpeedY;
+
+  // Bounce top/bottom
+  if (ballY<0 && ballSpeedY<0)   ballSpeedY = -ballSpeedY;
+  if (ballY>canvas.height && ballSpeedY>0)  ballSpeedY = -ballSpeedY;
+
+  // Paddle edges
+  let paddleLeftTop    = leftY;
+  let paddleLeftBottom = leftY + PADDLE_HEIGHT;
+  let paddleRightTop   = rightY;
+  let paddleRightBottom= rightY + PADDLE_HEIGHT;
+
+  // Check left paddle
+  if (ballX<20) {
+    if (ballY>paddleLeftTop && ballY<paddleLeftBottom) {
+      // Bounce off left paddle
+      ballSpeedX = -ballSpeedX;
+      paddleHitSound.currentTime=0;
+      paddleHitSound.play();
+      volleyCount++;
+      // Increase ball speed after 10 hits; 
+      // each new hit beyond 10 we do about 5% more
+      if (volleyCount>=10) {
+        ballSpeedX *= 1.05;
+        ballSpeedY *= 1.05;
+      }
+    } else {
+      // Score to right
+      rightScore++;
+      scoreSound.currentTime=0;
+      scoreSound.play();
+      checkForWin('Right');
+      if (!gameOver) scatterBall(ballX, ballY);
+    }
+  }
+
+  // Check right paddle
+  if (ballX>canvas.width-20) {
+    if (ballY>paddleRightTop && ballY<paddleRightBottom) {
+      ballSpeedX = -ballSpeedX;
+      paddleHitSound.currentTime=0;
+      paddleHitSound.play();
+      volleyCount++;
+      if (volleyCount>=10) {
+        ballSpeedX *= 1.05;
+        ballSpeedY *= 1.05;
+      }
+    } else {
+      // Score to left
+      leftScore++;
+      scoreSound.currentTime=0;
+      scoreSound.play();
+      checkForWin('Left');
+      if (!gameOver) scatterBall(ballX, ballY);
+    }
+  }
+}
+
+function checkForWin(scoringPlayer) {
+  if (scoringPlayer==='Left') {
+    if (leftScore>=WINNING_SCORE) {
+      endGame('LEFT');
+    }
+  } else {
+    if (rightScore>=WINNING_SCORE) {
+      endGame('RIGHT');
+    }
+  }
+}
+
+function endGame(winner) {
+  gameOver = true;
+  // Stop ball if it was moving
+  hideBall = true;
+  // Trigger fireworks
+  startFireworks(winner);
+}
+
+function drawEverything() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Paddles
+  ctx.fillStyle = '#aa00ff';
+  ctx.fillRect(0, leftY, PADDLE_WIDTH, PADDLE_HEIGHT);
+  ctx.fillStyle = '#00e676';
+  ctx.fillRect(canvas.width - PADDLE_WIDTH, rightY, PADDLE_WIDTH, PADDLE_HEIGHT);
+
+  // Ball
+  if (!hideBall && !scattering && !gameOver) {
+    ctx.fillStyle = '#ffd600';
+    ctx.beginPath();
+    ctx.arc(ballX, ballY, BALL_RADIUS, 0, Math.PI*2, true);
+    ctx.fill();
+  }
+
+  // Scatter particles
+  if (scattering) {
+    drawParticles();
+  }
+
+  // Fireworks if gameOver
+  if (gameOver) {
+    drawFireworks();
+  }
+
+  // Net
+  ctx.setLineDash([5,15]);
+  ctx.strokeStyle='#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(canvas.width/2,0);
+  ctx.lineTo(canvas.width/2,canvas.height);
+  ctx.stroke();
+
+  // Score / countdown
+  document.getElementById('score').textContent = `${leftScore} : ${rightScore}`;
+  let msg = "";
+  if (gameStopped) {
+    msg = "Press ENTER or SPACE to begin";
+  } else if (gamePaused && countdown>0) {
+    msg = (nextReceiver === 'left' ? "Left" : "Right") + " receives in " + countdown + "s";
+  }
+  document.getElementById('countdownMsg').textContent = msg;
+}
+
+function gameLoop() {
+  if (scattering) updateParticles();
+  if (gameOver)   updateFireworks();  
+  moveEverything();
+  drawEverything();
+  requestAnimationFrame(gameLoop);
+}
+gameLoop();
+
+// -----------------------------------------------------------------------------
+//  START / STOP / INSTRUCTIONS
+// -----------------------------------------------------------------------------
+function stopGame() {
+  gameStopped = true;
+  gamePaused  = true;
+  hideBall    = true;
+  if (countdownTimer) clearInterval(countdownTimer);
+}
+
+function startGame() {
+  // Reset everything for a new match
+  leftScore   = 0;
+  rightScore  = 0;
+  gameOver    = false;
+  winnerMsgDiv.style.display = 'none';
+  fireworks   = [];
+  
+  gameStopped = false;
+  resetPositions();
+  startServe(null);
+}
+
+function toggleInstructions() {
+  instructionsVisible = !instructionsVisible;
+  if (instructionsVisible) {
+    instructionsOverlay.classList.remove('hidden');
+    gamePaused = true;
+  } else {
+    instructionsOverlay.classList.add('hidden');
+    if (!gameStopped && !scattering && !gameOver) {
+      gamePaused = false;
+    }
+  }
+}
+
+// Start with instructions visible & game stopped
+stopGame();
+instructionsVisible = true;
+instructionsOverlay.classList.remove('hidden');
+
+// -----------------------------------------------------------------------------
+//  KEYBOARD INPUT
+// -----------------------------------------------------------------------------
+window.addEventListener('keydown', e => {
+  const key = e.key.toLowerCase();
+
+  if (gameOver) {
+    // If game is over, pressing any key restarts the game
+    // (You can change this behavior if you only want specific keys to restart.)
+    startGame();
+    return;
+  }
+
+  switch(key) {
+    case 'w':
+      paddleVelocityLeft = -PADDLE_MOVE_SPEED;
+      break;
+    case 's':
+      paddleVelocityLeft = PADDLE_MOVE_SPEED;
+      break;
+    case 'o':
+      paddleVelocityRight= -PADDLE_MOVE_SPEED;
+      break;
+    case 'l':
+      paddleVelocityRight= PADDLE_MOVE_SPEED;
+      break;
+
+    // Enter/Space -> Hide instructions if shown, or start/unpause
+    case 'enter':
+    case ' ':
+      if (instructionsVisible) {
+        toggleInstructions();
+      }
+      if (gameStopped) {
+        startGame();
+      } else if (gamePaused && !instructionsVisible && !scattering) {
+        gamePaused = false;
+      }
+      break;
+
+    // P toggles pause if instructions not shown
+    case 'p':
+      if (!instructionsVisible && !gameStopped && !scattering) {
+        gamePaused = !gamePaused;
+      }
+      break;
+
+    // H toggles instructions
+    case 'h':
+      toggleInstructions();
+      break;
+  }
 });
 
-
-            // Draw Fireworks
-            fireworks.forEach(firework => {
-                firework.particles.forEach(particle => {
-                    ctx.fillStyle = particle.color;
-                    ctx.beginPath();
-                    ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-            });
-
-            // Draw Score and Lives
-            ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
-            ctx.fillText(`Score: ${score}`, 10, 25);
-            ctx.fillText(`Lives: ${player.lives}/3`, 10, GAME_HEIGHT - 10);
-
-            // If Paused
-            if (gameState === 'paused') {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
-                ctx.fillStyle = 'white';
-                ctx.font = '24px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
-                ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
-                ctx.textAlign = 'left';
-            }
-        }
-
-        // Collision Detection
-        function isColliding(a, b) {
-            return a.x < b.x + b.width &&
-                   a.x + a.width > b.x &&
-                   a.y < b.y + b.height &&
-                   a.y + a.height > b.y;
-        }
-
-// Create Scatter Explosion Effect
-function createExplosion(x, y) {
-    const particleCount = 50; // Increase particle count for a larger scatter
-    const explosionSpeed = 4; // Increase speed for more spread
-    const explosionSize = 5; // Larger initial size for particles
-
-    for (let i = 0; i < particleCount; i++) {
-        const angle = Math.random() * Math.PI * 2; // Random angle (0 to 360 degrees)
-        const speed = Math.random() * explosionSpeed + 1; // Random speed between 1 and explosionSpeed
-        explosions.push({
-            x: x,
-            y: y,
-            vx: Math.cos(angle) * speed, // Horizontal velocity
-            vy: Math.sin(angle) * speed, // Vertical velocity
-            size: Math.random() * explosionSize + 2, // Random size between 2 and explosionSize
-            color: `hsl(${Math.random() * 360}, 100%, 50%)`, // Random colors for vibrant effect
-            timer: Math.random() * 40 + 30 // Lifespan between 30 and 70 frames
-        });
-    }
-
-    explosionSound.currentTime = 0;
-    explosionSound.play();
-}
-
-
-        // Reset Player After Hit
-function resetPlayer() {
-    player.lives--; // Reduce lives
-    if (player.lives <= 0) { // End game if no lives remain
-        gameOver = true;
-        showGameOver();
-        return;
-    }
-
-    // Start explosion and pause the game immediately
-    player.isExploding = true;
-    createExplosion(player.x + player.width / 2, player.y + player.height / 2);
-    explosionSound.currentTime = 0;
-    explosionSound.play();
-
-    // Pause game for 3 seconds
-    playerRespawning = true;
-    respawnCountdown = 3;
-    respawnStartTime = Date.now();
-}
-
-
-        // Calculate Enemy Speed Based on the Number of Remaining Enemies
-        function calculateEnemySpeed() {
-            const remainingEnemies = enemies.filter(enemy => enemy.alive).length;
-            if (remainingEnemies === 0) return 1; // Default speed when no enemies
-
-            // Calculate speed based on remaining enemies
-            // When remainingEnemies = initialEnemyCount => speed = 1
-            // When remainingEnemies = 1 => speed = 8
-            let speed = 1 + (7 * (initialEnemyCount - remainingEnemies)) / (initialEnemyCount - 1);
-            speed = Math.min(speed, 8); // Ensure speed does not exceed 8
-            return speed;
-        }
-
-        // Adjust Enemy Speed Based on the Number of Remaining Enemies
-        function adjustEnemySpeed() {
-            enemySpeed = calculateEnemySpeed();
-        }
-
-        // Spawn Mothership
-        function spawnMothership() {
-            const direction = Math.random() < 0.5 ? 'right' : 'left';
-            let speed;
-            let points;
-
-            if (Math.random() < 0.33) {
-                speed = 1.5;
-                points = 50;
-            } else if (Math.random() < 0.66) {
-                speed = 2.5;
-                points = 100;
-            } else {
-                speed = 3.5;
-                points = 500;
-            }
-
-            let mothership = {
-                x: direction === 'right' ? -80 : GAME_WIDTH,
-                y: 30,
-                width: 80,
-                height: 20,
-                speed: speed * (direction === 'right' ? 1 : -1),
-                direction: direction,
-                alive: true,
-                points: points
-            };
-            motherships.push(mothership);
-            mothershipAppearSound.currentTime = 0;
-            mothershipAppearSound.play();
-        }
-
-        // Create Fireworks
-        function createFireworks() {
-            fireworksSound.currentTime = 0;
-            fireworksSound.play();
-            for (let i = 0; i < 100; i++) {
-                fireworks.push({
-                    x: Math.random() * GAME_WIDTH,
-                    y: Math.random() * 200,
-                    size: Math.random() * 3 + 2,
-                    color: `hsl(${Math.random() * 360}, 100%, 50%)`,
-                    vx: Math.random() * 4 - 2,
-                    vy: Math.random() * -4 - 2,
-                    gravity: 0.05,
-                    timer: Math.random() * 60 + 60
-                });
-            }
-        }
-
-        // Start Next Level
-function startNextLevel() {
-    currentLevel++; // Increment level
-    initEnemies(currentLevel); // Reinitialize enemies
-    resetShields(); // Reset shields
-    fireworks = []; // Clear fireworks
-
-    // Restart the game loop and set the state to playing
-    gameState = 'playing'; // IMPORTANT: Set state before restarting loop
-    requestAnimationFrame(gameLoop); // Guarantees loop restarts
-}
-
-        // Reset Shields to full integrity
-        function resetShields() {
-            shields.forEach(shield => {
-                shield.segments.forEach(segment => {
-                    segment.intact = true;
-                });
-            });
-        }
-
-        // Initialize Game Loop and Draw Loop
-        gameLoop();
-    </script>
-<a href="https://linktr.ee/tomwellborn3" target="_blank" 
-   style="position: absolute; bottom: 10px; left: 10px; color: gray; font-size: 12px; text-decoration: none;">
-   Tom Wellborn, 2024
-</a>
+window.addEventListener('keyup', e => {
+  switch(e.key.toLowerCase()) {
+    case 'w':
+    case 's':
+      paddleVelocityLeft = 0;
+      break;
+    case 'o':
+    case 'l':
+      paddleVelocityRight = 0;
+      break;
+  }
+});
+</script>
 </body>
 </html>
