@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Classic Space Invaders</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: black;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            color: white;
+            position: relative;
+        }
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background-color: #000;
+        }
+        /* Overlay Styles */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            flex-direction: column;
+            z-index: 2;
+        }
+        .hidden {
+            display: none;
+        }
+        button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #444;
+            border: none;
+            color: white;
+        }
+        button:hover {
+            background-color: #666;
+        }
+        /* Explosion Animation */
+        .explosion {
+            position: absolute;
+            border: 2px solid red;
+            border-radius: 50%;
+            animation: explode 0.5s forwards;
+            pointer-events: none;
+            z-index: 3;
+        }
+        @keyframes explode {
+            from {
+                width: 10px;
+                height: 10px;
+                opacity: 1;
+            }
+            to {
+                width: 50px;
+                height: 50px;
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <!-- Overlays -->
+    <div id="startOverlay" class="overlay">
+        <h1>Space Invaders</h1>
+        <p>Press <strong>Spacebar</strong> to Start</p>
+    </div>
+
+    <div id="directionsOverlay" class="overlay hidden">
+        <h2>Controls</h2>
+        <p>←: Move Left</p>
+        <p>→: Move Right</p>
+        <p><strong>Ctrl</strong>: Fire</p>
+        <p><strong>Spacebar</strong>: Pause/Unpause</p>
+        <p><strong>H</strong>: Instructions (also pauses the game)</p>
+        <p><strong>Esc</strong>: End Game</p>
+        <button onclick="toggleDirections()">Close</button>
+    </div>
+
+    <!-- Sound Elements -->
+    <audio id="fireSound" src="shoot.wav"></audio>
+    <audio id="enemyHitSound" src="invaderkilled.wav"></audio>
+    <audio id="playerHitSound" src="explosion.wav"></audio>
+    <audio id="explosionSound" src="invaderkilled.wav"></audio>
+    <audio id="gameOverSound" src="explosion.wav"></audio>
+    <audio id="mothershipHitSound" src="explosion.wav"></audio>
+    <audio id="mothershipAppearSound" src="ufo_lowpitch.wav"></audio>
+    <audio id="fireworksSound" src="sounds/fireworks.mp3"></audio>
+
+    <script>
+        const mothershipImage = new Image();
+        mothershipImage.src = 'saucer@2x.png'; // Preload mothership image
+        const playerImage = new Image();
+        playerImage.src = 'play@2x.png'; // Preload player image
+
+        const shieldImage = new Image();
+        shieldImage.src = 'shield@2x.png'; // Replace with the actual path to your shield image
+
+        const alienImages = {
+            1: [new Image(), new Image()], // Alien 1
+            2: [new Image(), new Image()], // Alien 2
+            3: [new Image(), new Image()], // Alien 3
+            4: [new Image(), new Image()], // Alien 4
+            5: [new Image(), new Image()], // Alien 5
+            6: [new Image(), new Image()]  // Alien 6
+        };
+        
+        // Preload images
+        alienImages[1][0].src = 'inv11@2x.png';
+        alienImages[1][1].src = 'inv12@2x.png';
+        alienImages[2][0].src = 'inv11@2x.png';
+        alienImages[2][1].src = 'inv12@2x.png';
+        alienImages[3][0].src = 'inv31@2x.png';
+        alienImages[3][1].src = 'inv32@2x.png';
+        alienImages[4][0].src = 'inv31@2x.png'; 
+        alienImages[4][1].src = 'inv32@2x.png';
+        alienImages[5][0].src = 'inv21@2x.png';
+        alienImages[5][1].src = 'inv22@2x.png';
+        alienImages[6][0].src = 'inv21@2x.png';
+        alienImages[6][1].src = 'inv22@2x.png';
+
+        const invaderSounds = [
+            new Audio('fastinvader1.wav'),
+            new Audio('fastinvader2.wav'),
+            new Audio('fastinvader3.wav'),
+            new Audio('fastinvader4.wav')
+        ];
+        let currentInvaderSound = 0; // Tracks which sound to play
+        let stepDelay = 800; // Starting delay in milliseconds for step movement
+        let lastStepTime = 0; // Tracks last step time
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const startOverlay = document.getElementById('startOverlay');
+        const directionsOverlay = document.getElementById('directionsOverlay');
+
+        const GAME_WIDTH = canvas.width;
+        const GAME_HEIGHT = canvas.height;
+
+        let keys = {};
+        let gameState = 'start'; // 'start', 'playing', 'paused', 'countdown', 'gameover'
+        let spacePressed = false;
+
+        let playerRespawning = false; // Tracks if the player is in respawn mode
+        let respawnCountdown = 3;     // Countdown timer for respawn (in seconds)
+        let respawnStartTime = null;  // Tracks when the respawn countdown started
+
+        // Sound Effects
+        const fireSound = document.getElementById('fireSound');
+        const enemyHitSound = document.getElementById('enemyHitSound');
+        const playerHitSound = document.getElementById('playerHitSound');
+        const explosionSound = document.getElementById('explosionSound');
+        const gameOverSound = document.getElementById('gameOverSound');
+        const mothershipHitSound = document.getElementById('mothershipHitSound');
+        const mothershipAppearSound = document.getElementById('mothershipAppearSound');
+        const fireworksSound = document.getElementById('fireworksSound');
+
+        // Player
+        const playerWidth = 40;
+        const playerHeight = 20;
+         
+
+        // Enemies
+        const enemyRows = 6;
+        const enemyCols = 10;
+        const enemyWidth = 40;
+        const enemyHeight = 30;
+        const enemyPadding = 20;
+        let enemies = [];
+        let enemyDirection = 1; // 1: right, -1: left
+        let enemySpeed = 1;
+        let initialEnemyCount = enemyRows * enemyCols;
+
+        // Enemy Bullets
+        const bulletWidth = 5;
+        const bulletHeight = 10;
+        const bulletSpeed = 5;
+        let enemyBullets = [];
+
+        // Player Bullets
+        const playerBulletSpeed = 7;
+
+        // Shields
+        const shieldWidth = 100;
+        const shieldHeight = 50;
+        const shieldCount = 3;
+        const shieldSpacing = (GAME_WIDTH - (shieldCount * shieldWidth)) / (shieldCount + 1);
+        let shields = [];
+
+        // Explosion Effects
+        let explosions = [];
+
+        // Fireworks
+        let fireworks = [];
+
+        // Motherships
+        let motherships = [];
+        const mothershipInterval = 30000; // Every 30 seconds
+        let lastMothershipTime = Date.now();
+
+        // Game variables
+        let score = 0;
+        let gameOver = false;
+
+        // Level variables
+        let currentLevel = 1;
+        let countdownStartTime = null;
+        const countdownDuration = 3000; // 3 seconds in ms
+
+        // Colors for each enemy row
+        const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
+
+function tintImage(image, color) {
+    const offCanvas = document.createElement('canvas');
+    const offCtx = offCanvas.getContext('2d');
+
+    // Match image dimensions
+    offCanvas.width = image.width;
+    offCanvas.height = image.height;
+
+    // Draw the base image
+    offCtx.drawImage(image, 0, 0);
+
+    // Apply tint color
+    offCtx.globalCompositeOperation = 'source-atop';
+    offCtx.fillStyle = color;
+    offCtx.fillRect(0, 0, image.width, image.height);
+
+    return offCanvas; // Return the tinted version
+}
+function initEnemies(level) {
+    enemies = [];
+    const baseY = 50;
+    const rowHeight = enemyHeight + enemyPadding;
+
+    for (let row = 0; row < enemyRows; row++) {
+        for (let col = 0; col < enemyCols; col++) {
+            let enemyX = 60 + col * (enemyWidth + enemyPadding);
+            let enemyY = baseY + row * rowHeight;
+
+            const alienType = (row % 6) + 1; // Cycles through 6 types
+            enemies.push({
+                x: enemyX,
+                y: enemyY,
+                width: enemyWidth,
+                height: enemyHeight,
+                type: alienType, // Alien type (1 to 6)
+                frame: 0,        // Animation frame (0 or 1)
+                alive: true,
+                explosionTimer: 0
+            });
+        }
+    }
+
+    enemyDirection = 1; // Reset direction
+    enemySpeed = 1;     // Reset speed
+    initialEnemyCount = enemyRows * enemyCols;
+}
+
+        // Initialize Shields
+function initShields() {
+    shields = [];
+    for (let i = 0; i < shieldCount; i++) {
+        let shieldX = shieldSpacing + i * (shieldWidth + shieldSpacing);
+        let shieldY = GAME_HEIGHT - playerHeight - shieldHeight - 50    ;
+        shields.push({
+            x: shieldX,
+            y: shieldY,
+            width: shieldWidth,
+            height: shieldHeight,
+            segments: createShieldSegments(shieldWidth, shieldHeight, 5, 4) // 5 rows, 4 columns
+        });
+    }
+
+    // Initialize player after shields are set
+    let middleShield = shields[Math.floor(shields.length / 2)]; // Get the middle shield
+    player = {
+        x: middleShield.x + middleShield.width / 2 - playerWidth / 2, // Centered under the middle shield
+        y: middleShield.y + shieldHeight + 40, // 30 pixels below shield level
+        width: playerWidth,
+        height: playerHeight,
+        speed: 5,
+        color: 'green',
+        bullets: [],
+        lives: 3,
+        isExploding: false,
+        explosionTimer: 0
+    };
+}
+
+
+
+        // Create shield segments as a grid
+        function createShieldSegments(width, height, rows, cols) {
+            let segments = [];
+            const segmentWidth = width / cols;
+            const segmentHeight = height / rows;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    segments.push({
+                        x: c * segmentWidth,
+                        y: r * segmentHeight,
+                        width: segmentWidth,
+                        height: segmentHeight,
+                        intact: true
+                    });
+                }
+            }
+            return segments;
+        }
+
+        initEnemies(currentLevel);
+        initShields();
+
+        // Event Listeners
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                if (!spacePressed) {
+                    spacePressed = true;
+                    if (gameState === 'start') {
+                        startGame();
+                        return;
+                    }
+                    if (gameState === 'playing' || gameState === 'paused') {
+                        togglePause();
+                        return;
+                    }
+                }
+            }
+            keys[e.code] = true;
+
+            if (gameState === 'playing') {
+                if (e.code === 'KeyH') {
+                    toggleDirections();
+                }
+                if (e.code === 'Escape') {
+                    endGame();
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                spacePressed = false;
+            }
+            keys[e.code] = false;
+
+            // Reset fired flag for firing keys
+            if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+                keys['ControlFired'] = false;
+            }
+        });
+
+        function toggleDirections() {
+            if (directionsOverlay.classList.contains('hidden')) {
+                directionsOverlay.classList.remove('hidden');
+                if (gameState === 'playing') {
+                    gameState = 'paused';
+                }
+            } else {
+                directionsOverlay.classList.add('hidden');
+                if (gameState === 'paused') {
+                    gameState = 'playing';
+                    gameLoop(); // Resume the game loop when closing directions
+                }
+            }
+        }
+
+        function startGame() {
+            startOverlay.classList.add('hidden');
+            gameState = 'playing';
+            gameLoop();
+        }
+
+        function pauseGame() {
+            gameState = 'paused';
+        }
+
+        function resumeGame() {
+            gameState = 'playing';
+            gameLoop();
+        }
+
+        function togglePause() {
+            if (gameState === 'playing') {
+                pauseGame();
+            } else if (gameState === 'paused') {
+                resumeGame();
+            }
+        }
+
+        function endGame() {
+            const confirmEnd = confirm('Are you sure you want to end the game?');
+            if (confirmEnd) {
+                gameState = 'gameover';
+                showGameOver();
+            }
+        }
+
+        function showGameOver() {
+            gameOverSound.play();
+            alert(`Game Over!\nYour Score: ${score}`);
+            document.location.reload();
+        }
+
+        // Game Loop
+        function gameLoop() {
+            update();
+            draw();
+            if (!gameOver && (gameState === 'playing' || gameState === 'countdown')) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Update Game State
+        function update() {
+        if (playerRespawning) {
+            // Update explosions while paused
+            explosions.forEach((explosion, index) => {
+                explosion.x += explosion.vx;
+                explosion.y += explosion.vy;
+                explosion.vx *= 0.98;
+                explosion.vy *= 0.98;
+                explosion.size *= 0.95;
+                explosion.timer--;
+                if (explosion.timer <= 0 || explosion.size < 0.5) {
+                    explosions.splice(index, 1);
+                }
+            });
+        
+            // Countdown Timer
+            const elapsed = Date.now() - respawnStartTime;
+            respawnCountdown = 3 - Math.floor(elapsed / 1000);
+        
+            // Respawn when countdown ends
+            if (elapsed >= 3000) {
+                playerRespawning = false;
+                player.isExploding = false;
+                player.x = GAME_WIDTH / 2 - playerWidth / 2; // Reset position
+                player.y = GAME_HEIGHT - playerHeight - 40; // Keep it aligned
+            }
+        
+            return; // Skip all other updates during countdown
+        }
+
+            if (gameState === 'countdown') {
+                const elapsed = Date.now() - countdownStartTime;
+            
+                // Transition to next level after countdown
+                if (elapsed >= countdownDuration) {
+                    startNextLevel(); // Moves to the next level
+                }
+                return; // Exit update to prevent further processing
+            }
+
+
+
+            if (gameState !== 'playing') return;
+
+            // Player Movement
+            if (keys['ArrowLeft'] && player.x > 0) {
+                player.x -= player.speed;
+            }
+            if (keys['ArrowRight'] && player.x + playerWidth < GAME_WIDTH) {
+                player.x += player.speed;
+            }
+
+            // Fire Player Bullet
+            if ((keys['ControlLeft'] || keys['ControlRight']) && !keys['ControlFired']) {
+                player.bullets.push({
+                    x: player.x + player.width / 2 - 2.5, // Centered bullet
+                    y: player.y,
+                    width: 5,
+                    height: 15,
+                    color: 'yellow'
+                });
+                fireSound.currentTime = 0;
+                fireSound.play();
+                keys['ControlFired'] = true;
+            }
+
+            // Update Player Bullets
+            player.bullets.forEach((bullet, index) => {
+                bullet.y -= playerBulletSpeed;
+                // Remove bullet if it goes off screen
+                if (bullet.y + bullet.height < 0) {
+                    player.bullets.splice(index, 1);
+                } else {
+                    let hit = false;
+
+                    // Check collision with enemies
+                    enemies.forEach((enemy, eIndex) => {
+                        if (enemy.alive && isColliding(bullet, enemy)) {
+                            enemy.alive = false;
+                            enemyHitSound.currentTime = 0;
+                            enemyHitSound.play();
+                            player.bullets.splice(index, 1);
+                            score += 10;
+                            createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+                            // Adjust enemy speed based on remaining enemies
+                            adjustEnemySpeed();
+                            hit = true;
+                        }
+                    });
+
+                    if (hit) return; // Bullet already handled
+
+                    // Check collision with shields
+                    shields.forEach((shield) => {
+                        shield.segments.forEach((segment) => {
+                            if (segment.intact && isColliding(bullet, {
+                                x: shield.x + segment.x,
+                                y: shield.y + segment.y,
+                                width: segment.width,
+                                height: segment.height
+                            })) {
+                                segment.intact = false;
+                                player.bullets.splice(index, 1);
+                                hit = true;
+                            }
+                        });
+                    });
+
+                    if (hit) return; // Bullet already handled
+
+                    // Check collision with motherships
+                    motherships.forEach((mothership, mIndex) => {
+                        if (mothership.alive && isColliding(bullet, mothership)) {
+                            let points = 0;
+                            if (mothership.speed < 2) {
+                                points = 50;
+                            } else if (mothership.speed >= 2 && mothership.speed < 4) {
+                                points = 100;
+                            } else if (mothership.speed >= 4 && mothership.speed < 6) {
+                                points = 200;
+                            } else if (mothership.speed >= 6 && mothership.speed < 8) {
+                                points = 300;
+                            } else {
+                                points = 500;
+                                player.lives += 1;
+                            }
+                            score += points;
+                            mothership.alive = false;
+                            mothershipHitSound.currentTime = 0;
+                            mothershipHitSound.play();
+                            player.bullets.splice(index, 1);
+                            createExplosion(mothership.x + mothership.width / 2, mothership.y + mothership.height / 2);
+                            hit = true;
+                        }
+                    });
+                }
+            });
+
+            // Calculate enemy speed based on the number of remaining enemies
+            enemySpeed = calculateEnemySpeed();
+
+            // Move enemies in 'step' fashion
+const now = Date.now();
+if (now - lastStepTime > stepDelay) {
+    let shouldMoveDown = false;
+
+    enemies.forEach(enemy => {
+        if (enemy.alive) {
+            enemy.x += (enemyWidth / 2) * enemyDirection; // Half-step horizontal movement
+            enemy.frame = 1 - enemy.frame; // Toggle frame for animation
+
+            if (enemy.x + enemy.width >= GAME_WIDTH || enemy.x <= 0) {
+                shouldMoveDown = true;
+            }
+        }
+    });
+
+    if (shouldMoveDown) {
+        enemyDirection *= -1;
+        enemies.forEach(enemy => {
+            if (enemy.alive) {
+                enemy.y += enemyHeight / 4; // Half-step vertical movement
+            }
+        });
+    }
+
+    // Play step sound and cycle
+    invaderSounds[currentInvaderSound].currentTime = 0;
+    invaderSounds[currentInvaderSound].play();
+    currentInvaderSound = (currentInvaderSound + 1) % invaderSounds.length;
+
+    lastStepTime = now;
+    adjustStepSpeed(); // Update speed based on enemies
+}
+
+
+            // Check collision between enemies and shields
+            enemies.forEach(enemy => {
+                if (enemy.alive) {
+                    shields.forEach(shield => {
+                        shield.segments.forEach(segment => {
+                            if (segment.intact && isColliding(enemy, {
+                                x: shield.x + segment.x,
+                                y: shield.y + segment.y,
+                                width: segment.width,
+                                height: segment.height
+                            })) {
+                                segment.intact = false;
+                            }
+                        });
+                    });
+                }
+            });
+
+            // Fire Enemy Bullets
+            if (Math.random() < 0.005) { // Adjusted firing frequency
+                const aliveEnemies = enemies.filter(e => e.alive);
+                if (aliveEnemies.length > 0) {
+                    const shooter = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+                    enemyBullets.push({
+                        x: shooter.x + shooter.width / 2 - bulletWidth / 2,
+                        y: shooter.y + shooter.height,
+                        width: bulletWidth,
+                        height: bulletHeight,
+                        color: 'white'
+                    });
+                }
+            }
+
+            // Update Enemy Bullets
+            enemyBullets.forEach((bullet, index) => {
+                bullet.y += bulletSpeed;
+                // Remove bullet if it goes off screen
+                if (bullet.y > GAME_HEIGHT) {
+                    enemyBullets.splice(index, 1);
+                } else {
+                    let hit = false;
+
+                    // Check collision with shields
+                    shields.forEach((shield) => {
+                        shield.segments.forEach((segment) => {
+                            if (segment.intact && isColliding(bullet, {
+                                x: shield.x + segment.x,
+                                y: shield.y + segment.y,
+                                width: segment.width,
+                                height: segment.height
+                            })) {
+                                segment.intact = false;
+                                enemyBullets.splice(index, 1);
+                                hit = true;
+                            }
+                        });
+                    });
+
+                    if (hit) return; // Bullet already handled
+
+                    // Check collision with player
+                    if (isColliding(bullet, player) && !player.isExploding) {
+                        enemyBullets.splice(index, 1);
+                        playerHitSound.currentTime = 0;
+                        playerHitSound.play();
+                        createExplosion(player.x + player.width / 2, player.y + player.height / 2);
+                        player.lives -= 1;
+                        if (player.lives > 0) {
+                            resetPlayer();
+                        } else {
+                            gameOver = true;
+                            showGameOver();
+                        }
+                    }
+                }
+            });
+
+            // Update Motherships
+            motherships.forEach((mothership, mIndex) => {
+                if (mothership.alive) {
+                    mothership.x += mothership.speed;
+                    // Remove mothership if it goes off screen
+                    if (mothership.direction === 'right' && mothership.x > GAME_WIDTH) {
+                        mothership.alive = false;
+                    } else if (mothership.direction === 'left' && mothership.x + mothership.width < 0) {
+                        mothership.alive = false;
+                    }
+                }
+            });
+
+            // Spawn Motherships
+            if (Date.now() - lastMothershipTime > mothershipInterval) {
+                spawnMothership();
+                lastMothershipTime = Date.now();
+            }
+
+// Update Explosions
+explosions.forEach((explosion, index) => {
+    explosion.x += explosion.vx; // Move horizontally
+    explosion.y += explosion.vy; // Move vertically
+
+    // Apply slight slowdown effect (friction)
+    explosion.vx *= 0.98;
+    explosion.vy *= 0.98;
+
+    // Gradually shrink particle size
+    explosion.size *= 0.95;
+
+    // Reduce timer
+    explosion.timer--;
+
+    // Remove particles when their timer expires or they become too small
+    if (explosion.timer <= 0 || explosion.size < 0.5) {
+        explosions.splice(index, 1);
+    }
+});
+
+
+            // Update Fireworks
+            fireworks.forEach((firework, index) => {
+                firework.timer--;
+                firework.particles.forEach((particle) => {
+                    particle.x += particle.vx;
+                    particle.y += particle.vy;
+                    particle.vy += particle.gravity;
+                });
+                if (firework.timer <= 0) {
+                    fireworks.splice(index, 1);
+                }
+            });
+
+            // Check Win Condition
+            if (enemies.every(e => !e.alive)) {
+                createFireworks();
+                gameState = 'countdown';
+                countdownStartTime = Date.now();
+            }
+        }
+function adjustStepSpeed() {
+    const remainingEnemies = enemies.filter(enemy => enemy.alive).length;
+    const totalEnemies = enemyRows * enemyCols;
+
+    if (remainingEnemies === 1) {
+        stepDelay = 200 / 3; // 200% faster for the last enemy
+    } else if (remainingEnemies <= totalEnemies / 4) {
+        stepDelay = 300 * 0.8; // Speed 3 increased by 20%
+    } else if (remainingEnemies <= totalEnemies / 2) {
+        stepDelay = 500; // Speed 2 unchanged
+    } else if (remainingEnemies <= (3 * totalEnemies) / 4) {
+        stepDelay = 650; // Speed 1 unchanged
+    } else {
+        stepDelay = 800; // Starting speed
+    }
+}
+
+
+        // Draw Game State
+        function draw() {
+            // Clear fireworks before drawing new frames
+            fireworks = fireworks.filter(firework => firework.timer > 0);
+            // Clear Canvas
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            if (playerRespawning) {
+                // Dim the screen
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            
+                // Draw explosions while paused
+                explosions.forEach(explosion => {
+                    ctx.fillStyle = explosion.color;
+                    ctx.beginPath();
+                    ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            
+                // Display countdown text
+                ctx.fillStyle = 'white';
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Respawning in ${respawnCountdown}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+            
+                return; // Skip drawing the rest during countdown
+            }
+            if (gameState === 'start') {
+                // Dim screen handled by overlay
+                return;
+            }
+
+            if (gameState === 'countdown') {
+                const now = Date.now();
+                const elapsed = now - countdownStartTime;
+                let remaining = 3 - Math.floor(elapsed / 1000);
+                if (remaining < 0) remaining = 0;
+
+                // Draw Fireworks
+                fireworks.forEach(firework => {
+                    firework.particles.forEach(particle => {
+                        ctx.fillStyle = particle.color;
+                        ctx.beginPath();
+                        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                });
+
+                // Draw Countdown Overlay
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
+                ctx.fillStyle = 'white';
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Level ${currentLevel + 1} starting in ${remaining}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+                ctx.textAlign = 'left';
+                return;
+            }
+
+            // Draw Player with Image
+            if (!player.isExploding) {
+                if (playerImage.complete && playerImage.naturalHeight !== 0) {
+                    ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
+                } else {
+                    // Fallback placeholder if image is not loaded
+                    ctx.fillStyle = 'green';
+                    ctx.fillRect(player.x, player.y, player.width, player.height);
+                }
+            }
+
+
+            // Draw Player Bullets
+            player.bullets.forEach(bullet => {
+                ctx.fillStyle = bullet.color;
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+
+            // Draw Enemies
+            // Draw Enemies with Animation Frames
+            enemies.forEach(enemy => {
+                if (enemy.alive) {
+                    const img = alienImages[enemy.type][enemy.frame]; // Select image by type and frame
+                    
+                    // Ensure the image is loaded before drawing
+                    if (img.complete && img.naturalHeight !== 0) {
+                        ctx.drawImage(img, enemy.x, enemy.y, enemy.width, enemy.height); // Draw alien image
+                    } else {
+                        // Fallback placeholder if image is not loaded
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                    }
+                }
+            });
+
+
+
+            // Draw Enemy Bullets
+            enemyBullets.forEach(bullet => {
+                ctx.fillStyle = bullet.color;
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+
+// Draw Shields with Image Masking
+shields.forEach(shield => {
+    shield.segments.forEach(segment => {
+        if (segment.intact) {
+            // Draw intact part of the shield using the image
+            if (shieldImage.complete && shieldImage.naturalHeight !== 0) {
+                ctx.drawImage(
+                    shieldImage, // Source image
+                    shield.x + segment.x, // X position
+                    shield.y + segment.y, // Y position
+                    segment.width, // Width
+                    segment.height // Height
+                );
+            } else {
+                // Fallback if image isn't loaded
+                ctx.fillStyle = 'green';
+                ctx.fillRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
+            }
+        } else {
+            // Damaged segment - Render transparency to simulate a 'chip'
+            ctx.clearRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
+        }
+    });
+});
+
+            // Draw Motherships
+            motherships.forEach(mothership => {
+                if (mothership.alive) {
+                    if (mothershipImage.complete && mothershipImage.naturalHeight !== 0) {
+                        ctx.drawImage(mothershipImage, mothership.x, mothership.y, mothership.width, mothership.height);
+                    } else {
+                        // Fallback to rectangle if image is not ready
+if (mothershipImage.complete && mothershipImage.naturalHeight !== 0) {
+    ctx.drawImage(mothershipImage, mothership.x, mothership.y, mothership.width, mothership.height);
+} else {
+    // Fallback to rectangle if image is not ready
+    ctx.fillStyle = 'purple';
+    ctx.fillRect(mothership.x, mothership.y, mothership.width, mothership.height);
+}
+                    }
+                    // Optional: Add more details to mothership
+                }
+            });
+
+// Draw Scatter Explosions
+explosions.forEach(explosion => {
+    ctx.fillStyle = explosion.color; // Random color per particle
+    ctx.beginPath();
+    ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
+    ctx.fill();
+});
+
+
+            // Draw Fireworks
+            fireworks.forEach(firework => {
+                firework.particles.forEach(particle => {
+                    ctx.fillStyle = particle.color;
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            });
+
+            // Draw Score and Lives
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Score: ${score}`, 10, 25);
+            ctx.fillText(`Lives: ${player.lives}/3`, 10, GAME_HEIGHT - 10);
+
+            // If Paused
+            if (gameState === 'paused') {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
+                ctx.fillStyle = 'white';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
+                ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
+                ctx.textAlign = 'left';
+            }
+        }
+
+        // Collision Detection
+        function isColliding(a, b) {
+            return a.x < b.x + b.width &&
+                   a.x + a.width > b.x &&
+                   a.y < b.y + b.height &&
+                   a.y + a.height > b.y;
+        }
+
+// Create Scatter Explosion Effect
+function createExplosion(x, y) {
+    const particleCount = 50; // Increase particle count for a larger scatter
+    const explosionSpeed = 4; // Increase speed for more spread
+    const explosionSize = 5; // Larger initial size for particles
+
+    for (let i = 0; i < particleCount; i++) {
+        const angle = Math.random() * Math.PI * 2; // Random angle (0 to 360 degrees)
+        const speed = Math.random() * explosionSpeed + 1; // Random speed between 1 and explosionSpeed
+        explosions.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * speed, // Horizontal velocity
+            vy: Math.sin(angle) * speed, // Vertical velocity
+            size: Math.random() * explosionSize + 2, // Random size between 2 and explosionSize
+            color: `hsl(${Math.random() * 360}, 100%, 50%)`, // Random colors for vibrant effect
+            timer: Math.random() * 40 + 30 // Lifespan between 30 and 70 frames
+        });
+    }
+
+    explosionSound.currentTime = 0;
+    explosionSound.play();
+}
+
+
+        // Reset Player After Hit
+function resetPlayer() {
+    player.lives--; // Reduce lives
+    if (player.lives <= 0) { // End game if no lives remain
+        gameOver = true;
+        showGameOver();
+        return;
+    }
+
+    // Start explosion and pause the game immediately
+    player.isExploding = true;
+    createExplosion(player.x + player.width / 2, player.y + player.height / 2);
+    explosionSound.currentTime = 0;
+    explosionSound.play();
+
+    // Pause game for 3 seconds
+    playerRespawning = true;
+    respawnCountdown = 3;
+    respawnStartTime = Date.now();
+}
+
+
+        // Calculate Enemy Speed Based on the Number of Remaining Enemies
+        function calculateEnemySpeed() {
+            const remainingEnemies = enemies.filter(enemy => enemy.alive).length;
+            if (remainingEnemies === 0) return 1; // Default speed when no enemies
+
+            // Calculate speed based on remaining enemies
+            // When remainingEnemies = initialEnemyCount => speed = 1
+            // When remainingEnemies = 1 => speed = 8
+            let speed = 1 + (7 * (initialEnemyCount - remainingEnemies)) / (initialEnemyCount - 1);
+            speed = Math.min(speed, 8); // Ensure speed does not exceed 8
+            return speed;
+        }
+
+        // Adjust Enemy Speed Based on the Number of Remaining Enemies
+        function adjustEnemySpeed() {
+            enemySpeed = calculateEnemySpeed();
+        }
+
+        // Spawn Mothership
+        function spawnMothership() {
+            const direction = Math.random() < 0.5 ? 'right' : 'left';
+            let speed;
+            let points;
+
+            if (Math.random() < 0.33) {
+                speed = 1.5;
+                points = 50;
+            } else if (Math.random() < 0.66) {
+                speed = 2.5;
+                points = 100;
+            } else {
+                speed = 3.5;
+                points = 500;
+            }
+
+            let mothership = {
+                x: direction === 'right' ? -80 : GAME_WIDTH,
+                y: 30,
+                width: 80,
+                height: 20,
+                speed: speed * (direction === 'right' ? 1 : -1),
+                direction: direction,
+                alive: true,
+                points: points
+            };
+            motherships.push(mothership);
+            mothershipAppearSound.currentTime = 0;
+            mothershipAppearSound.play();
+        }
+
+        // Create Fireworks
+        function createFireworks() {
+            fireworksSound.currentTime = 0;
+            fireworksSound.play();
+            for (let i = 0; i < 100; i++) {
+                fireworks.push({
+                    x: Math.random() * GAME_WIDTH,
+                    y: Math.random() * 200,
+                    size: Math.random() * 3 + 2,
+                    color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+                    vx: Math.random() * 4 - 2,
+                    vy: Math.random() * -4 - 2,
+                    gravity: 0.05,
+                    timer: Math.random() * 60 + 60
+                });
+            }
+        }
+
+        // Start Next Level
+function startNextLevel() {
+    currentLevel++; // Increment level
+    initEnemies(currentLevel); // Reinitialize enemies
+    resetShields(); // Reset shields
+    fireworks = []; // Clear fireworks
+
+    // Restart the game loop and set the state to playing
+    gameState = 'playing'; // IMPORTANT: Set state before restarting loop
+    requestAnimationFrame(gameLoop); // Guarantees loop restarts
+}
+
+        // Reset Shields to full integrity
+        function resetShields() {
+            shields.forEach(shield => {
+                shield.segments.forEach(segment => {
+                    segment.intact = true;
+                });
+            });
+        }
+
+        // Initialize Game Loop and Draw Loop
+        gameLoop();
+    </script>
+<a href="https://linktr.ee/tomwellborn3" target="_blank" 
+   style="position: absolute; bottom: 10px; left: 10px; color: gray; font-size: 12px; text-decoration: none;">
+   Tom Wellborn, 2024
+</a>
+</body>
+</html>
