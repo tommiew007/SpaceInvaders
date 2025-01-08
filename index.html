@@ -76,7 +76,8 @@
     <!-- Overlays -->
     <div id="startOverlay" class="overlay">
         <h1>Space Invaders</h1>
-        <p>Press <strong>Spacebar</strong> to Start</p>
+            <p id="startMessage">Press <strong>Spacebar</strong> to Start</p>
+
     </div>
 
     <div id="directionsOverlay" class="overlay hidden">
@@ -226,6 +227,21 @@
 
         // Colors for each enemy row
         const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
+function handleStart() {
+    if (gameState === 'start') {
+        startGame();
+    }
+}
+// Check if the device is mobile
+function isMobileDevice() {
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 800;
+}
+
+// Change start message dynamically
+const startMessage = document.getElementById('startMessage');
+if (isMobileDevice()) {
+    startMessage.innerHTML = "Tap <strong>Screen</strong> to Start";
+}
 
 function resizeCanvas() {
     if (isMobileDevice()) {
@@ -391,6 +407,17 @@ document.addEventListener('keydown', (e) => {
     keys[e.code] = true;
 });
 
+// Start game on spacebar for desktop
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        handleStart();
+    }
+});
+
+// Start game on tap for mobile
+if (isMobileDevice()) {
+    canvas.addEventListener('touchstart', handleStart);
+}
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space') {
                 if (!spacePressed) {
