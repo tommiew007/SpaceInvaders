@@ -173,16 +173,18 @@
         const mothershipAppearSound = document.getElementById('mothershipAppearSound');
         const fireworksSound = document.getElementById('fireworksSound');
 
+        const SCALE = isMobileDevice() ? 0.5 : 1; // Reduce size by half for mobile
+
         // Player
-        const playerWidth = 40;
-        const playerHeight = 20;
+        const playerWidth = 40 * SCALE;
+        const playerHeight = 20 * SCALE;
          
 
         // Enemies
         const enemyRows = 6;
         const enemyCols = 10;
-        const enemyWidth = 40;
-        const enemyHeight = 30;
+        const enemyWidth = 40 * SCALE;
+        const enemyHeight = 30 * SCALE;
         const enemyPadding = 20;
         let enemies = [];
         let enemyDirection = 1; // 1: right, -1: left
@@ -199,8 +201,8 @@
         const playerBulletSpeed = 7;
 
         // Shields
-        const shieldWidth = 100;
-        const shieldHeight = 50;
+        const shieldWidth = 100 * SCALE;
+        const shieldHeight = 50 * SCALE;
         const shieldCount = 3;
         const shieldSpacing = (GAME_WIDTH - (shieldCount * shieldWidth)) / (shieldCount + 1);
         let shields = [];
@@ -224,6 +226,23 @@
 
         // Colors for each enemy row
         const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
+
+function resizeCanvas() {
+    if (isMobileDevice()) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    } else {
+        canvas.width = 800;
+        canvas.height = 600;
+    }
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+        
+function isMobileDevice() {
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 800;
+}
 
 function destroyAllAliens() {
     enemies.forEach(enemy => {
@@ -461,6 +480,42 @@ document.addEventListener('keydown', (e) => {
             alert(`Game Over!\nYour Score: ${score}`);
             document.location.reload();
         }
+if (isMobileDevice()) {
+    let touchStartX = 0;
+
+    canvas.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+        const touchX = e.touches[0].clientX;
+        const deltaX = touchX - touchStartX;
+
+        // Move the player based on swipe direction
+        if (deltaX > 10) {
+            player.x += player.speed; // Move right
+        } else if (deltaX < -10) {
+            player.x -= player.speed; // Move left
+        }
+
+        touchStartX = touchX; // Update starting point
+    });
+
+    // Tap anywhere on the screen to fire
+    canvas.addEventListener('touchend', () => {
+        if (player.bullets.length < 3) {
+            player.bullets.push({
+                x: player.x + player.width / 2 - 2.5,
+                y: player.y,
+                width: 5,
+                height: 15,
+                color: 'yellow'
+            });
+            fireSound.currentTime = 0;
+            fireSound.play();
+        }
+    });
+}
 
         // Game Loop
 function gameLoop() {
@@ -950,7 +1005,9 @@ if (gameState === 'countdown') {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
     ctx.fillStyle = 'white';
-    ctx.font = '30px Arial';
+
+    ctx.font = isMobileDevice() ? '30px Arial' : '36px Arial';
+    
     ctx.textAlign = 'center';
     ctx.fillText(`Level ${currentLevel + 1} starting in ${remaining}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
     ctx.textAlign = 'left';
@@ -1066,7 +1123,9 @@ explosions.forEach(explosion => {
 
             // Draw Score and Lives
             ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
+
+            ctx.font = isMobileDevice() ? '16px Arial' : '20px Arial';
+            
             ctx.fillText(`Score: ${score}`, 10, 25);
             ctx.fillText(`Lives: ${player.lives}/3`, 10, GAME_HEIGHT - 10);
 
@@ -1075,7 +1134,7 @@ explosions.forEach(explosion => {
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                 ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
                 ctx.fillStyle = 'white';
-                ctx.font = '24px Arial';
+                ctx.font = isMobileDevice() ? '24px Arial' : '30px Arial';
                 ctx.textAlign = 'center';
                 ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
                 ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
