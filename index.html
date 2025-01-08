@@ -415,8 +415,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Start game on tap for mobile
+// Start game on tap for mobile
 if (isMobileDevice()) {
-    canvas.addEventListener('touchstart', handleStart);
+    startOverlay.addEventListener('touchstart', handleStart); // Attach listener to overlay
 }
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space') {
