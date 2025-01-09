@@ -96,8 +96,8 @@
     <audio id="enemyHitSound" src="invaderkilled.wav"></audio>
     <audio id="playerHitSound" src="explosion.wav"></audio>
     <audio id="explosionSound" src="invaderkilled.wav"></audio>
-    <audio id="gameOverSound" src="explosion.wav"></audio>
-    <audio id="mothershipHitSound" src="explosion.wav"></audio>
+    <audio id="gameOverSound" src="game-over-arcade-6435.mp3"></audio>
+    <audio id="mothershipHitSound" src="arcade-ui-26-229495.mp3"></audio>
     <audio id="mothershipAppearSound" src="ufo_lowpitch.wav"></audio>
     <audio id="fireworksSound" src="explosion.wav"></audio>
 
@@ -106,13 +106,14 @@
         let lastFireTime = 0;
         const fireCooldown = 300; // Minimum 300ms between shots
         let fireworks = [];
+        let isMothershipSoundPlaying = false;
         const mothershipImage = new Image();
         mothershipImage.src = 'saucer@2x.png'; // Preload mothership image
         const playerImage = new Image();
         playerImage.src = 'play@2x.png'; // Preload player image
 
         const shieldImage = new Image();
-        shieldImage.src = 'shield@2x.png'; // Replace with the actual path to your shield image
+        shieldImage.src = 'shield@2a.png'; // Replace with the actual path to your shield image
 
         const alienImages = {
             1: [new Image(), new Image()], // Alien 1
@@ -186,7 +187,7 @@
         const enemyCols = 10;
         const enemyWidth = 40 * SCALE;
         const enemyHeight = 30 * SCALE;
-        const enemyPadding = 20;
+        const enemyPadding = 15;
         let enemies = [];
         let enemyDirection = 1; // 1: right, -1: left
         let enemySpeed = 1;
@@ -204,7 +205,7 @@
         // Shields
         const shieldWidth = 100 * SCALE;
         const shieldHeight = 50 * SCALE;
-        const shieldCount = 3;
+        const shieldCount = 4;
         const shieldSpacing = (GAME_WIDTH - (shieldCount * shieldWidth)) / (shieldCount + 1);
         let shields = [];
 
@@ -227,6 +228,21 @@
 
         // Colors for each enemy row
         const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
+function togglePause() {
+    if (gameState === 'playing') {
+        pauseGame();
+        // Pause mothership sound if playing
+        if (isMothershipSoundPlaying) {
+            mothershipAppearSound.pause();
+        }
+    } else if (gameState === 'paused') {
+        resumeGame();
+        // Resume mothership sound if applicable
+        if (isMothershipSoundPlaying) {
+            mothershipAppearSound.play();
+        }
+    }
+}
 function handleStart() {
     if (gameState === 'start') {
         startGame();
@@ -255,10 +271,6 @@ function resizeCanvas() {
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
-        
-function isMobileDevice() {
-    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 800;
-}
 
 function destroyAllAliens() {
     enemies.forEach(enemy => {
@@ -334,13 +346,13 @@ function initShields() {
     shields = [];
     for (let i = 0; i < shieldCount; i++) {
         let shieldX = shieldSpacing + i * (shieldWidth + shieldSpacing);
-        let shieldY = GAME_HEIGHT - playerHeight - shieldHeight - 50    ;
+        let shieldY = GAME_HEIGHT - playerHeight - shieldHeight - 50;
         shields.push({
             x: shieldX,
             y: shieldY,
             width: shieldWidth,
             height: shieldHeight,
-            segments: createShieldSegments(shieldWidth, shieldHeight, 5, 4) // 5 rows, 4 columns
+            segments: createShieldSegments(shieldWidth, shieldHeight) // Custom layout
         });
     }
 
@@ -362,58 +374,85 @@ function initShields() {
 
 
 
+
         // Create shield segments as a grid
-        function createShieldSegments(width, height, rows, cols) {
-            let segments = [];
-            const segmentWidth = width / cols;
-            const segmentHeight = height / rows;
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    segments.push({
-                        x: c * segmentWidth,
-                        y: r * segmentHeight,
-                        width: segmentWidth,
-                        height: segmentHeight,
-                        intact: true
-                    });
-                }
-            }
-            return segments;
+function createShieldSegments(width, height) {
+    let segments = [];
+    const topRows = 2; // Top two rows
+    const bottomRows = 3; // Bottom three rows
+    const topCols = 2; // 2 columns for top rows
+    const bottomCols = 4; // 4 columns for bottom rows
+
+    const segmentWidth = width / bottomCols; // Base segment width for 4 columns
+    const segmentHeight = height / (topRows + bottomRows); // Divide total height into 5 rows
+
+    // Create top rows (2x2)
+    for (let r = 0; r < topRows; r++) {
+        for (let c = 0; c < topCols; c++) {
+            segments.push({
+                x: (bottomCols / 2 - topCols / 2) * segmentWidth + c * segmentWidth, // Centered 2 columns
+                y: r * segmentHeight,
+                width: segmentWidth,
+                height: segmentHeight,
+                intact: true,
+            });
         }
+    }
+
+    // Create bottom rows (4x3)
+    for (let r = 0; r < bottomRows; r++) {
+        for (let c = 0; c < bottomCols; c++) {
+            segments.push({
+                x: c * segmentWidth, // Spread across full width
+                y: topRows * segmentHeight + r * segmentHeight, // Offset below top rows
+                width: segmentWidth,
+                height: segmentHeight,
+                intact: true,
+            });
+        }
+    }
+
+    return segments;
+}
+
 
         initEnemies(currentLevel);
         initShields();
 
         // Event Listeners
-document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.code === 'KeyB') {
-        destroyAllAliens(); // New feature
-        return; // Prevent further processing
-    }
 
-    if (e.code === 'Space') {
-        if (!spacePressed) {
-            spacePressed = true;
-            if (gameState === 'start') {
-                startGame();
-                return;
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.code === 'KeyB') {
+                destroyAllAliens(); // Feature: Destroy all aliens
+                return; // Prevent further processing
             }
-            if (gameState === 'playing' || gameState === 'paused') {
-                togglePause();
-                return;
+        
+            if (e.code === 'Space') {
+                if (!spacePressed) {
+                    spacePressed = true;
+                    if (gameState === 'start') {
+                        startGame();
+                        return;
+                    }
+                    if (gameState === 'playing' || gameState === 'paused') {
+                        togglePause();
+                        return;
+                    }
+                }
             }
-        }
-    }
-    keys[e.code] = true;
-});
-
-// Start game on spacebar for desktop
-document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') {
-        handleStart();
-    }
-});
-
+        
+            if (gameState === 'playing') {
+                if (e.code === 'KeyH') {
+                    toggleDirections();
+                }
+                if (e.code === 'Escape') {
+                    endGame();
+                }
+            }
+        
+            // Track key state
+            keys[e.code] = true;
+        });
 // Start game on tap for mobile
 // Start game on tap for mobile
 if (isMobileDevice()) {
@@ -450,13 +489,12 @@ if (isMobileDevice()) {
                 spacePressed = false;
             }
             keys[e.code] = false;
-
+        
             // Reset fired flag for firing keys
             if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
                 keys['ControlFired'] = false;
             }
         });
-
         function toggleDirections() {
             if (directionsOverlay.classList.contains('hidden')) {
                 directionsOverlay.classList.remove('hidden');
@@ -624,7 +662,7 @@ if (
         y: player.y,
         width: 5,
         height: 15,
-        color: 'yellow'
+        color: 'blue'
     });
     fireSound.currentTime = 0;
     fireSound.play();
@@ -717,9 +755,9 @@ if (now - lastStepTime > stepDelay) {
             enemy.x += (enemyWidth / 2) * enemyDirection; // Half-step horizontal movement
             enemy.frame = 1 - enemy.frame; // Toggle frame for animation
 
-            if (enemy.x + enemy.width >= GAME_WIDTH || enemy.x <= 0) {
-                shouldMoveDown = true;
-            }
+        if (enemy.x + enemy.width >= GAME_WIDTH - enemyPadding || enemy.x <= enemyPadding) {
+            shouldMoveDown = true;
+        }
         }
     });
 
@@ -727,7 +765,7 @@ if (now - lastStepTime > stepDelay) {
         enemyDirection *= -1;
         enemies.forEach(enemy => {
             if (enemy.alive) {
-                enemy.y += enemyHeight / 4; // Half-step vertical movement
+                enemy.y += enemyHeight / 2; // Half-step vertical movement
             }
         });
     }
@@ -770,7 +808,7 @@ if (now - lastStepTime > stepDelay) {
                         y: shooter.y + shooter.height,
                         width: bulletWidth,
                         height: bulletHeight,
-                        color: 'white'
+                        color: 'red'
                     });
                 }
             }
