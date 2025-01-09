@@ -1,3 +1,5 @@
+still no good. the lives drop to 1/3 out of 3/3 after one hit.
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -363,7 +365,7 @@ function initShields() {
         y: middleShield.y + shieldHeight + 40, // 30 pixels below shield level
         width: playerWidth,
         height: playerHeight,
-        speed: 5,
+        speed: 200,
         color: 'green',
         bullets: [],
         lives: 3,
@@ -589,10 +591,15 @@ function gameLoop() {
     const deltaTime = (now - lastUpdateTime) / 1000; // Time elapsed in seconds
     lastUpdateTime = now; // Update the time tracker
 
-    update(deltaTime); // Pass deltaTime to update logic
-    draw();
+    if (!playerRespawning) {
+        update(deltaTime); // Pass deltaTime to update logic only if not respawning
+    } else {
+        console.log('Skipping game loop during respawn...');
+    }
 
-    if (!gameOver && (gameState === 'playing' || gameState === 'countdown')) {
+    draw(); // Drawing should continue regardless of state
+
+    if (!gameOver) {
         requestAnimationFrame(gameLoop);
     }
 }
@@ -601,6 +608,7 @@ function gameLoop() {
         function update(deltaTime) {
         if (playerRespawning) {
             // Update explosions while paused
+			console.log('Player is respawning, skipping update.');
             explosions.forEach((explosion, index) => {
                 explosion.x += explosion.vx;
                 explosion.y += explosion.vy;
@@ -643,12 +651,12 @@ function gameLoop() {
             if (gameState !== 'playing') return;
 
             // Player Movement
-            if (keys['ArrowLeft'] && player.x > 0) {
-                player.x -= player.speed;
-            }
-            if (keys['ArrowRight'] && player.x + playerWidth < GAME_WIDTH) {
-                player.x += player.speed;
-            }
+ if (keys['ArrowLeft'] && player.x > 0) {
+    player.x -= player.speed * deltaTime; // Scaled appropriately
+}
+if (keys['ArrowRight'] && player.x + playerWidth < GAME_WIDTH) {
+    player.x += player.speed * deltaTime; // Scaled appropriately
+}
 
             // Fire Player Bullet
 // Limit the player to 3 bullets at a time
@@ -815,7 +823,7 @@ if (now - lastStepTime > stepDelay) {
 
             // Update Enemy Bullets
             enemyBullets.forEach((bullet, index) => {
-                bullet.y += bulletSpeed;
+                  bullet.y += bulletSpeed * deltaTime * 60; // Ensure this multiplication is intentional
                 // Remove bullet if it goes off screen
                 if (bullet.y > GAME_HEIGHT) {
                     enemyBullets.splice(index, 1);
@@ -846,7 +854,7 @@ if (now - lastStepTime > stepDelay) {
                         playerHitSound.currentTime = 0;
                         playerHitSound.play();
                         createExplosion(player.x + player.width / 2, player.y + player.height / 2);
-                        player.lives -= 1;
+                         
                         if (player.lives > 0) {
                             resetPlayer();
                         } else {
@@ -1022,26 +1030,27 @@ function drawShields() {
             // Clear Canvas
             ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-            if (playerRespawning) {
-                // Dim the screen
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-            
-                // Draw explosions while paused
-                explosions.forEach(explosion => {
-                    ctx.fillStyle = explosion.color;
-                    ctx.beginPath();
-                    ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-            
-                // Display countdown text
-                ctx.font = '48px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(`Respawning in ${respawnCountdown}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
-            
-                return; // Skip drawing the rest during countdown
-            }
+if (playerRespawning) {
+    // Dim the screen
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    // Draw explosions while paused
+    explosions.forEach(explosion => {
+        ctx.fillStyle = explosion.color;
+        ctx.beginPath();
+        ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Display countdown text
+    ctx.font = '48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'white';
+    ctx.fillText(`Respawning in ${respawnCountdown}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+
+    return; // Skip drawing the rest during countdown
+}
             if (gameState === 'start') {
                 // Dim screen handled by overlay
                 return;
@@ -1242,25 +1251,58 @@ function createExplosion(x, y) {
 
 
         // Reset Player After Hit
+ 
 function resetPlayer() {
-    player.lives--; // Reduce lives
-    if (player.lives <= 0) { // End game if no lives remain
-        gameOver = true;
+    if (playerRespawning || player.isExploding) {
+        console.log('Player is already respawning or exploding.');
+        return;
+    }
+
+    console.log('Player hit! Starting respawn sequence.');
+    player.isExploding = true;
+    playerRespawning = true;
+ 
+
+    // Decrement lives
+    if (player.lives > 0) {
+        player.lives--;
+        console.log(`Lives decremented: ${player.lives}`);
+    }
+
+    // Check for Game Over
+    if (player.lives <= 0) {
+        console.log('No lives left. Game Over!');
         showGameOver();
         return;
     }
 
-    // Start explosion and pause the game immediately
-    player.isExploding = true;
+    // Trigger explosion
     createExplosion(player.x + player.width / 2, player.y + player.height / 2);
     explosionSound.currentTime = 0;
     explosionSound.play();
 
-    // Pause game for 3 seconds
-    playerRespawning = true;
-    respawnCountdown = 3;
-    respawnStartTime = Date.now();
+    // Pause before dimming
+setTimeout(() => {
+    console.log('Dimming screen...');
+
+    setTimeout(() => {
+        console.log('Respawning player...');
+        player.isExploding = false;
+        playerRespawning = false;
+
+        // Reset player position
+        player.x = GAME_WIDTH / 2 - playerWidth / 2;
+        player.y = GAME_HEIGHT - playerHeight - 40;
+
+        // Optionally ensure player is visible again
+    }, 3000);
+}, 2000);
+
 }
+
+
+
+
 
 
         // Calculate Enemy Speed Based on the Number of Remaining Enemies
