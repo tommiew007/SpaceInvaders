@@ -249,6 +249,55 @@
 
         // Colors for each enemy row
         const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
+
+function simulateMothershipHit() {
+    const activeMothership = motherships.find(mothership => mothership.alive);
+
+    if (activeMothership) {
+        let points = 0;
+
+        if (activeMothership.speed === 1.0) {
+            // Slow mothership
+            points = 50;
+            console.log('Slow mothership destroyed! Awarded 50 points.');
+        } else if (activeMothership.speed === 2.0) {
+            // Fast mothership
+            points = 200;
+            player.lives += 1; // Add a new life
+            console.log('Fast mothership destroyed! Awarded 200 points and gained an extra life.');
+        }
+
+        // Update score
+        score += points;
+
+        // Mark mothership as not alive
+        activeMothership.alive = false;
+
+        // Play hit sound
+        mothershipHitSound.currentTime = 0;
+        mothershipHitSound.play();
+
+        // Create explosion effect at mothership's position
+        createExplosion(
+            activeMothership.x + activeMothership.width / 2,
+            activeMothership.y + activeMothership.height / 2
+        );
+
+        console.log(`Mothership hit: awarded ${points} points.`);
+
+        // Check win condition
+        if (enemies.every(e => !e.alive)) {
+            createFireworks();
+            gameState = 'countdown';
+            countdownStartTime = Date.now();
+        }
+    } else {
+        console.log('No active mothership to strike.');
+        // Optional: Display a temporary message on the screen
+    }
+}
+
+
 function togglePause() {
     if (gameState === 'playing') {
         pauseGame();
@@ -442,74 +491,50 @@ function createShieldSegments(width, height) {
 
         // Event Listeners
 
-        document.addEventListener('keydown', (e) => {
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.code === 'KeyB') {
+        destroyAllAliens(); // Feature: Destroy all aliens
+        return; // Prevent further processing
+    }
 
-            if (e.ctrlKey && e.code === 'KeyB') {
-                destroyAllAliens(); // Feature: Destroy all aliens
-                return; // Prevent further processing
+    if (e.code === 'KeyM') { // **Handle 'M' Key**
+        simulateMothershipHit(); // Function to simulate a mothership strike
+    }
+    if (e.code === 'Space') {
+        if (!spacePressed) {
+            spacePressed = true;
+            if (gameState === 'start') {
+                startGame();
+                return;
             }
-        
-            if (e.code === 'Space') {
-                if (!spacePressed) {
-                    spacePressed = true;
-                    if (gameState === 'start') {
-                        startGame();
-                        return;
-                    }
-                    if (gameState === 'playing' || gameState === 'paused') {
-                        togglePause();
-                        return;
-                    }
-                }
+            if (gameState === 'playing' || gameState === 'paused') {
+                togglePause();
+                return;
             }
-        
-                if (e.code === 'KeyP') {
-                    resetPlayer();
+        }
+    }
 
-                }
+    if (e.code === 'KeyP') {
+        resetPlayer();
+    }
 
-            if (gameState === 'playing') {
-                if (e.code === 'KeyH') {
-                    toggleDirections();
-                }
-                if (e.code === 'Escape') {
-                    endGame();
-                }
-            }
-        
-            // Track key state
-            keys[e.code] = true;
-        });
+    if (gameState === 'playing') {
+        if (e.code === 'KeyH') {
+            toggleDirections();
+        }
+        if (e.code === 'Escape') {
+            endGame();
+        }
+    }
+
+    // Track key state
+    keys[e.code] = true;
+});
 // Start game on tap for mobile
 // Start game on tap for mobile
 if (isMobileDevice()) {
     startOverlay.addEventListener('touchstart', handleStart); // Attach listener to overlay
 }
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
-                if (!spacePressed) {
-                    spacePressed = true;
-                    if (gameState === 'start') {
-                        startGame();
-                        return;
-                    }
-                    if (gameState === 'playing' || gameState === 'paused') {
-                        togglePause();
-                        return;
-                    }
-                }
-            }
-            keys[e.code] = true;
-
-            if (gameState === 'playing') {
-                if (e.code === 'KeyH') {
-                    toggleDirections();
-                }
-                if (e.code === 'Escape') {
-                    endGame();
-                }
-            }
-        });
 
         document.addEventListener('keyup', (e) => {
             if (e.code === 'Space') {
@@ -744,30 +769,31 @@ if (
                     if (hit) return; // Bullet already handled
 
                     // Check collision with motherships
-                    motherships.forEach((mothership, mIndex) => {
-                        if (mothership.alive && isColliding(bullet, mothership)) {
-                            let points = 0;
-                            if (mothership.speed < 2) {
-                                points = 50;
-                            } else if (mothership.speed >= 2 && mothership.speed < 4) {
-                                points = 100;
-                            } else if (mothership.speed >= 4 && mothership.speed < 6) {
-                                points = 200;
-                            } else if (mothership.speed >= 6 && mothership.speed < 8) {
-                                points = 300;
-                            } else {
-                                points = 500;
-                                player.lives += 1;
-                            }
-                            score += points;
-                            mothership.alive = false;
-                            mothershipHitSound.currentTime = 0;
-                            mothershipHitSound.play();
-                            player.bullets.splice(index, 1);
-                            createExplosion(mothership.x + mothership.width / 2, mothership.y + mothership.height / 2);
-                            hit = true;
-                        }
-                    });
+// Check collision with motherships
+motherships.forEach((mothership, mIndex) => {
+    if (mothership.alive && isColliding(bullet, mothership)) {
+        let points = 0;
+        
+        if (mothership.speed === 1.0) {
+            // Slow mothership
+            points = 50;
+        } else if (mothership.speed === 2.0) {
+            // Fast mothership
+            points = 200;
+            player.lives += 1; // Add a new life
+            console.log('Fast mothership destroyed! Player gains an extra life.');
+        }
+        
+        score += points;
+        mothership.alive = false;
+        mothershipHitSound.currentTime = 0;
+        mothershipHitSound.play();
+        player.bullets.splice(index, 1);
+        createExplosion(mothership.x + mothership.width / 2, mothership.y + mothership.height / 2);
+        hit = true;
+    }
+});
+
                 }
             });
 
@@ -1330,6 +1356,12 @@ function resetPlayer() {
 
         // Spawn Mothership
 function spawnMothership() {
+    // Check if a mothership is already active
+    if (motherships.some(mothership => mothership.alive)) {
+        console.log('Mothership already active. Not spawning a new one.');
+        return;
+    }
+
     const direction = Math.random() < 0.5 ? 'right' : 'left';
     let speed, sound;
 
@@ -1350,7 +1382,7 @@ function spawnMothership() {
         speed: speed * (direction === 'right' ? 1 : -1),
         direction: direction,
         alive: true,
-        points: speed === 1.5 ? 50 : 200, // Adjust points based on speed
+        points: speed === 1.0 ? 50 : 200, // Adjust points based on speed
         sound: new Audio(sound), // Assign the sound for this mothership
     };
 
@@ -1358,28 +1390,8 @@ function spawnMothership() {
     mothership.sound.play(); // Start playing the sound
 
     motherships.push(mothership);
+    console.log(`Spawned a ${speed === 1.0 ? 'slow' : 'fast'} mothership moving ${direction}.`);
 }
-
-        // Create Fireworks
-        function createFireworks() {
-            fireworksSound.currentTime = 0;
-            fireworksSound.play();
-            for (let i = 0; i < 100; i++) {
-fireworks.push({
-    particles: Array.from({ length: 20 }).map(() => ({
-        x: Math.random() * GAME_WIDTH,
-        y: Math.random() * 200,
-        size: Math.random() * 3 + 2,
-        color: `hsl(${Math.random() * 360}, 100%, 50%)`,
-        vx: Math.random() * 4 - 2,
-        vy: Math.random() * -4 - 2,
-        gravity: 0.05
-    })),
-    timer: Math.random() * 60 + 60
-});
-
-            }
-        }
 
         // Start Next Level
 function startNextLevel() {
