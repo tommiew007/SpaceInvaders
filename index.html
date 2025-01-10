@@ -250,6 +250,26 @@
         // Colors for each enemy row
         const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
 
+// Create Fireworks
+function createFireworks() {
+    fireworksSound.currentTime = 0;
+    fireworksSound.play();
+    for (let i = 0; i < 100; i++) {
+        fireworks.push({
+            particles: Array.from({ length: 20 }).map(() => ({
+                x: Math.random() * GAME_WIDTH,
+                y: Math.random() * 200,
+                size: Math.random() * 3 + 2,
+                color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+                vx: Math.random() * 4 - 2,
+                vy: Math.random() * -4 - 2,
+                gravity: 0.05
+            })),
+            timer: Math.random() * 60 + 60
+        });
+    }
+}
+
 function simulateMothershipHit() {
     const activeMothership = motherships.find(mothership => mothership.alive);
 
