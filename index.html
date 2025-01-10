@@ -1,4 +1,4 @@
-
+ 
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -121,6 +121,7 @@
     <audio id="fireworksSound" src="explosion.wav"></audio>
 
     <script>
+		let enemyFiringDisabled = false;
         let lastUpdateTime = Date.now();
         let lastFireTime = 0;
         const fireCooldown = 300; // Minimum 300ms between shots
@@ -442,6 +443,7 @@ function createShieldSegments(width, height) {
         // Event Listeners
 
         document.addEventListener('keydown', (e) => {
+
             if (e.ctrlKey && e.code === 'KeyB') {
                 destroyAllAliens(); // Feature: Destroy all aliens
                 return; // Prevent further processing
@@ -461,6 +463,11 @@ function createShieldSegments(width, height) {
                 }
             }
         
+                if (e.code === 'KeyP') {
+                    resetPlayer();
+
+                }
+
             if (gameState === 'playing') {
                 if (e.code === 'KeyH') {
                     toggleDirections();
@@ -515,20 +522,16 @@ if (isMobileDevice()) {
                 keys['ControlFired'] = false;
             }
         });
-        function toggleDirections() {
-            if (directionsOverlay.classList.contains('hidden')) {
-                directionsOverlay.classList.remove('hidden');
-                if (gameState === 'playing') {
-                    gameState = 'paused';
-                }
-            } else {
-                directionsOverlay.classList.add('hidden');
-                if (gameState === 'paused') {
-                    gameState = 'playing';
-                    gameLoop(); // Resume the game loop when closing directions
-                }
-            }
-        }
+		function toggleDirections() {
+			const directionsOverlay = document.getElementById('directionsOverlay');
+			if (directionsOverlay.classList.contains('hidden')) {
+				directionsOverlay.classList.remove('hidden');
+				gameState = 'paused'; // Pause the game when help is shown
+			} else {
+				directionsOverlay.classList.add('hidden');
+				gameState = 'playing'; // Resume the game when help is hidden
+			}
+		}
 
         function startGame() {
             startOverlay.classList.add('hidden');
@@ -824,20 +827,20 @@ if (now - lastStepTime > stepDelay) {
                 }
             });
 
-            // Fire Enemy Bullets
-            if (Math.random() < 0.005) { // Adjusted firing frequency
-                const aliveEnemies = enemies.filter(e => e.alive);
-                if (aliveEnemies.length > 0) {
-                    const shooter = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
-                    enemyBullets.push({
-                        x: shooter.x + shooter.width / 2 - bulletWidth / 2,
-                        y: shooter.y + shooter.height,
-                        width: bulletWidth,
-                        height: bulletHeight,
-                        color: 'red'
-                    });
-                }
-            }
+// Fire Enemy Bullets
+if (!enemyFiringDisabled && Math.random() < 0.005) { // Adjusted firing frequency
+    const aliveEnemies = enemies.filter(e => e.alive);
+    if (aliveEnemies.length > 0) {
+        const shooter = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+        enemyBullets.push({
+            x: shooter.x + shooter.width / 2 - bulletWidth / 2,
+            y: shooter.y + shooter.height,
+            width: bulletWidth,
+            height: bulletHeight,
+            color: 'red'
+        });
+    }
+}
 
             // Update Enemy Bullets
             enemyBullets.forEach((bullet, index) => {
@@ -1051,217 +1054,138 @@ function drawShields() {
         });
     });
 }
+function drawFireworks() {
+    fireworks.forEach(firework => {
+        firework.particles.forEach(particle => {
+            ctx.fillStyle = particle.color;
+            ctx.beginPath();
+            ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    });
+}
 
         // Draw Game State
-        function draw() {
-            // Clear fireworks before drawing new frames
-            fireworks = fireworks.filter(firework => firework.timer > 0);
-			// Clear Canvas
-			ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-	
-	
-	
-			if (playerRespawning) {
-				// Dim the screen
-				ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-				ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+function draw() {
+    // Clear fireworks before drawing new frames
+    fireworks = fireworks.filter(firework => firework.timer > 0);
+    // Clear Canvas
+    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-				// Draw explosions while paused
-				explosions.forEach(explosion => {
-					ctx.fillStyle = explosion.color;
-					ctx.beginPath();
-					ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
-					ctx.fill();
-				});
+    if (playerRespawning) {
+        // Apply grayscale filter (already handled in resetPlayer())
+        // No need to dim the screen manually
 
-				// Display countdown text
-				ctx.font = '14px "Press Start 2P"';
-				ctx.textAlign = 'center';
-				ctx.fillStyle = 'white';
-				ctx.fillText(`Respawning in ${respawnCountdown}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+        // Draw explosions during respawn
+        explosions.forEach(explosion => {
+            ctx.fillStyle = explosion.color;
+            ctx.beginPath();
+            ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
 
-				return; // Skip drawing the rest during countdown
-			}
-            if (gameState === 'start') {
-                // Dim screen handled by overlay
-                return;
-            }
+        // Display countdown text
+        ctx.font = '14px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'white';
+        ctx.fillText(`Respawning in ${respawnCountdown}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
 
-			if (gameState === 'countdown') {
+        // **Remove the return statement to continue drawing the rest of the game**
+        // return; // Comment out or remove this line
+    }
 
-					const now = Date.now();
-					const elapsed = now - countdownStartTime;
-					let remaining = 3 - Math.floor(elapsed / 1000);
-					if (remaining < 0) remaining = 0; // Prevent negative numbers
-				
-						
-				
-				// Dim the background
-				ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-				ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    if (gameState === 'start') {
+        // Dim screen handled by overlay
+        return;
+    }
 
-				// Draw the game layout in the background
-				drawShields();
-				drawEnemies();
-				drawPlayer();
-				drawMotherships();
-				drawExplosions();
-				
-				// Draw Countdown Overlay
-				ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-				ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
-				ctx.fillStyle = 'white';
+    if (gameState === 'countdown') {
+        // Draw countdown overlay
+        const now = Date.now();
+        const elapsed = now - countdownStartTime;
+        let remaining = 3 - Math.floor(elapsed / 1000);
+        if (remaining < 0) remaining = 0; // Prevent negative numbers
 
-				ctx.font = isMobileDevice() ? '30px Arial' : '36px Arial';
-				
-				ctx.textAlign = 'center';
-				ctx.fillText(`Level ${currentLevel + 1} starting in ${remaining}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
-				ctx.textAlign = 'left';
+        // Dim the background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
 
-				return; // Skip the rest of the draw cycle during countdown
-			}
+        // Draw game elements in the background
+        drawShields();
+        drawEnemies();
+        drawPlayer();
+        drawMotherships();
+        drawExplosions();
 
-            // Draw Player with Image
-            if (!player.isExploding) {
-                if (playerImage.complete && playerImage.naturalHeight !== 0) {
-                    ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
-                } else {
-                    // Fallback placeholder if image is not loaded
-                    ctx.fillStyle = 'green';
-                    ctx.fillRect(player.x, player.y, player.width, player.height);
-                }
-            }
+        // Draw Countdown Text
+        ctx.fillStyle = 'white';
+        ctx.font = isMobileDevice() ? '30px Arial' : '36px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Level ${currentLevel + 1} starting in ${remaining}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+        ctx.textAlign = 'left';
 
+        return; // Skip the rest of the draw cycle during countdown
+    }
 
-            // Draw Player Bullets
-            player.bullets.forEach(bullet => {
-                ctx.fillStyle = bullet.color;
-                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-            });
+    // **Continue drawing all game elements regardless of respawn state**
+    // Draw Player
+    drawPlayer();
 
-            // Draw Enemies
-            // Draw Enemies with Animation Frames
-            enemies.forEach(enemy => {
-                if (enemy.alive) {
-                    const img = alienImages[enemy.type][enemy.frame]; // Select image by type and frame
-                    
-                    // Ensure the image is loaded before drawing
-                    if (img.complete && img.naturalHeight !== 0) {
-                        ctx.drawImage(img, enemy.x, enemy.y, enemy.width, enemy.height); // Draw alien image
-                    } else {
-                        // Fallback placeholder if image is not loaded
-                        ctx.fillStyle = 'white';
-                        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-                    }
-                }
-            });
+    // Draw Player Bullets
+    player.bullets.forEach(bullet => {
+        ctx.fillStyle = bullet.color;
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+    });
 
+    // Draw Enemies
+    drawEnemies();
 
+    // Draw Enemy Bullets
+    enemyBullets.forEach(bullet => {
+        ctx.fillStyle = bullet.color;
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+    });
 
-            // Draw Enemy Bullets
-            enemyBullets.forEach(bullet => {
-                ctx.fillStyle = bullet.color;
-                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-            });
+    // Draw Shields
+    drawShields();
 
-			// Draw Shields with Image Masking
-			shields.forEach(shield => {
-				shield.segments.forEach(segment => {
-					if (segment.intact) {
-						// Draw intact part of the shield using the image
-						if (shieldImage.complete && shieldImage.naturalHeight !== 0) {
-							ctx.drawImage(
-								shieldImage, // Source image
-								shield.x + segment.x, // X position
-								shield.y + segment.y, // Y position
-								segment.width, // Width
-								segment.height // Height
-							);
-						} else {
-							// Fallback if image isn't loaded
-							ctx.fillStyle = 'green';
-							ctx.fillRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
-						}
-					} else {
-						// Damaged segment - Render transparency to simulate a 'chip'
-						ctx.clearRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
-					}
-				});
-			});
+    // Draw Motherships
+    drawMotherships();
 
-            // Draw Motherships
-            motherships.forEach(mothership => {
-                if (mothership.alive) {
-                    if (mothershipImage.complete && mothershipImage.naturalHeight !== 0) {
-                        ctx.drawImage(mothershipImage, mothership.x, mothership.y, mothership.width, mothership.height);
-                    } else {
-                        // Fallback to rectangle if image is not ready
-					if (mothershipImage.complete && mothershipImage.naturalHeight !== 0) {
-						ctx.drawImage(mothershipImage, mothership.x, mothership.y, mothership.width, mothership.height);
-					} else {
-						// Fallback to rectangle if image is not ready
-						ctx.fillStyle = 'purple';
-						ctx.fillRect(mothership.x, mothership.y, mothership.width, mothership.height);
-					}
-                    }
-                    // Optional: Add more details to mothership
-                }
-            });
+    // Draw Explosions
+    drawExplosions();
 
-			// Draw Scatter Explosions
-			explosions.forEach(explosion => {
-				ctx.fillStyle = explosion.color; // Random color per particle
-				ctx.beginPath();
-				ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
-				ctx.fill();
-			});
+    // Draw Fireworks
+    drawFireworks();
 
+    // Draw Score and Lives
+    const padding = 20; // Space from the edges
+    const textHeight = 30; // Height for text placement
+    const retroColor = '#00FF00'; // Classic arcade green color
 
-            // Draw Fireworks
-            fireworks.forEach(firework => {
-                firework.particles.forEach(particle => {
-                    ctx.fillStyle = particle.color;
-                    ctx.beginPath();
-                    ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-            });
+    ctx.fillStyle = retroColor;
+    ctx.font = '14px "Press Start 2P"';
+    ctx.textAlign = 'left';
+    ctx.fillText(`SCORE: ${score}`, padding, textHeight);
 
-			// Draw Score (Top Left)
-			const padding = 20; // Space from the edges
-			const textHeight = 30; // Height for text placement
-			const retroFont = '24px PressStart2P'; // Retro-styled font
-			const retroColor = '#00FF00'; // Classic arcade green color
+    // Draw Player Lives (Top Right)
+    ctx.textAlign = 'right';
+    ctx.fillText(`LIVES: ${player.lives}/3`, GAME_WIDTH - padding, textHeight);
+    ctx.textAlign = 'left';
 
+    // If Paused
+    if (gameState === 'paused') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
+        ctx.fillStyle = 'white';
+        ctx.font = isMobileDevice() ? '24px Arial' : '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
+        ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
+        ctx.textAlign = 'left';
+    }
+}
 
-
-
-
-			ctx.fillStyle = retroColor;
-			ctx.font = '14px "Press Start 2P"';
-			ctx.textAlign = 'left';
-			ctx.fillText(`SCORE: ${score}`, padding, textHeight);
-
-			// Draw Player Lives (Top Right)
-			ctx.textAlign = 'right';
-			ctx.fillText(`LIVES: ${player.lives}/3`, GAME_WIDTH - padding, textHeight);
-
-
-
-
-
-            // If Paused
-            if (gameState === 'paused') {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
-                ctx.fillStyle = 'white';
-                ctx.font = isMobileDevice() ? '24px Arial' : '30px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
-                ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
-                ctx.textAlign = 'left';
-            }
-        }
 
         // Collision Detection
         function isColliding(a, b) {
@@ -1307,7 +1231,6 @@ function resetPlayer() {
     console.log('Player hit! Starting respawn sequence.');
     player.isExploding = true;
     playerRespawning = true;
- 
 
     // Decrement lives
     if (player.lives > 0) {
@@ -1327,25 +1250,61 @@ function resetPlayer() {
     explosionSound.currentTime = 0;
     explosionSound.play();
 
-    // Pause before dimming
-setTimeout(() => {
-    console.log('Dimming screen...');
+    // Disable enemy firing and clear existing enemy bullets
+    enemyFiringDisabled = true;
+    enemyBullets = [];
+
+    // Duration of the explosion animation (e.g., 0.5 seconds)
+    const explosionDuration = 500; // in milliseconds
+    const grayscaleDuration = 1000; // 1 second
 
     setTimeout(() => {
-        console.log('Respawning player...');
-        player.isExploding = false;
-        playerRespawning = false;
+        console.log('Applying grayscale filter.');
+        canvas.style.filter = 'grayscale(100%)'; // Apply black and white filter
 
-        // Reset player position
-        player.x = GAME_WIDTH / 2 - playerWidth / 2;
-        player.y = GAME_HEIGHT - playerHeight - 40;
+        // Duration of the grayscale effect
+        setTimeout(() => {
+            // Start the 3-second countdown before resuming the game
+            respawnCountdown = 3;
+            respawnStartTime = Date.now();
+            const countdownInterval = setInterval(() => {
+                const elapsed = Date.now() - respawnStartTime;
+                const remaining = 3 - Math.floor(elapsed / 1000);
+                if (remaining >= 0) {
+                    respawnCountdown = remaining;
+                }
+                if (elapsed >= 3000) {
+                    clearInterval(countdownInterval);
+                    console.log('Resuming gameplay.');
 
-        // Optionally ensure player is visible again
-    }, 3000);
-}, 2000);
+                    // Reset player position
+                    player.x = GAME_WIDTH / 2 - playerWidth / 2;
+                    player.y = GAME_HEIGHT - playerHeight - 40;
 
+                    // Remove respawning flags
+                    player.isExploding = false;
+                    playerRespawning = false;
+
+                    // Remove grayscale filter
+                    console.log('Removing grayscale filter.');
+                    canvas.style.filter = 'none'; // Revert to color
+
+                    // Re-enable enemy firing after 2 seconds
+                    setTimeout(() => {
+                        enemyFiringDisabled = false;
+                        console.log('Enemy firing re-enabled.');
+                    }, 2000); // 2000 milliseconds = 2 seconds
+                }
+            }, 1000); // Changed from 1 ms to 1000 ms
+
+        }, grayscaleDuration);
+
+    }, explosionDuration);
+
+    // **Remove the immediate removal of the grayscale filter**
+    // console.log('Removing grayscale filter.');
+    // canvas.style.filter = 'none'; // Revert to color
 }
-
 
 
 
@@ -1376,10 +1335,10 @@ function spawnMothership() {
 
     // 80% chance for slow, 20% chance for fast mothership
     if (Math.random() < 0.8) {
-        speed = 1.5; // Slow speed
+        speed = 1.0; // Slow speed
         sound = "ufo_lowpitch.wav";
     } else {
-        speed = 3.0; // Fast speed
+        speed = 2.0; // Fast speed
         sound = "ufo_highpitch.wav";
     }
 
