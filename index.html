@@ -1332,36 +1332,37 @@ setTimeout(() => {
         }
 
         // Spawn Mothership
-        function spawnMothership() {
-            const direction = Math.random() < 0.5 ? 'right' : 'left';
-            let speed;
-            let points;
+function spawnMothership() {
+    const direction = Math.random() < 0.5 ? 'right' : 'left';
+    let speed, sound;
 
-            if (Math.random() < 0.33) {
-                speed = 1.5;
-                points = 50;
-            } else if (Math.random() < 0.66) {
-                speed = 2.5;
-                points = 100;
-            } else {
-                speed = 3.5;
-                points = 500;
-            }
+    // 80% chance for slow, 20% chance for fast mothership
+    if (Math.random() < 0.8) {
+        speed = 1.0; // Slow speed
+        sound = "ufo_lowpitch.wav";
+    } else {
+        speed = 2.0; // Fast speed
+        sound = "ufo_highpitch.wav";
+    }
 
-            let mothership = {
-                x: direction === 'right' ? -80 : GAME_WIDTH,
-                y: 30,
-                width: 80,
-                height: 20,
-                speed: speed * (direction === 'right' ? 1 : -1),
-                direction: direction,
-                alive: true,
-                points: points
-            };
-            motherships.push(mothership);
-            mothershipAppearSound.currentTime = 0;
-            mothershipAppearSound.play();
-        }
+    const mothership = {
+        x: direction === 'right' ? -80 : GAME_WIDTH,
+        y: 30,
+        width: 80,
+        height: 20,
+        speed: speed * (direction === 'right' ? 1 : -1),
+        direction: direction,
+        alive: true,
+        points: speed === 1.5 ? 50 : 200, // Adjust points based on speed
+    };
+
+    motherships.push(mothership);
+
+    // Play the appropriate sound
+    const mothershipSound = new Audio(sound);
+    mothershipSound.currentTime = 0;
+    mothershipSound.play();
+}
 
         // Create Fireworks
         function createFireworks() {
