@@ -13,6 +13,9 @@
 		<meta name="twitter:title" content="Space Invaders Reimagined (Alpha, 2025)">
 		<meta name="twitter:description" content="A reimagined classic in alpha. Play now!">
 		<meta name="twitter:image" content="preview.png">
+		<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+	
     <style>
         body {
             margin: 0;
@@ -22,6 +25,12 @@
             color: white;
             position: relative;
         }
+		#startMessage {
+			font-family: 'Press Start 2P', sans-serif;
+			font-size: 16px; /* Adjust size as needed */
+			color: #00FF00;  /* Match the arcade green */
+			text-align: center;
+		}
         #gameCanvas {
             display: block;
             margin: 0 auto;
@@ -122,6 +131,7 @@
         const playerImage = new Image();
         playerImage.src = 'play@2x.png'; // Preload player image
 
+		const retroFont = '24px "Press Start 2P"';
         const shieldImage = new Image();
         shieldImage.src = 'shield@2a.png'; // Replace with the actual path to your shield image
 
@@ -188,8 +198,8 @@
         const SCALE = isMobileDevice() ? 0.5 : 1; // Reduce size by half for mobile
 
         // Player
-        const playerWidth = 40 * SCALE;
-        const playerHeight = 20 * SCALE;
+        const playerWidth = 60 * SCALE;
+        const playerHeight = 30 * SCALE;
          
 
         // Enemies
@@ -873,18 +883,29 @@ if (now - lastStepTime > stepDelay) {
                 }
             });
 
-            // Update Motherships
-            motherships.forEach((mothership, mIndex) => {
-                if (mothership.alive) {
-                    mothership.x += mothership.speed;
-                    // Remove mothership if it goes off screen
-                    if (mothership.direction === 'right' && mothership.x > GAME_WIDTH) {
-                        mothership.alive = false;
-                    } else if (mothership.direction === 'left' && mothership.x + mothership.width < 0) {
-                        mothership.alive = false;
-                    }
-                }
-            });
+motherships.forEach((mothership, mIndex) => {
+    if (mothership.alive) {
+        mothership.x += mothership.speed;
+
+        // Stop sound and remove mothership if it leaves the screen
+        if ((mothership.direction === 'right' && mothership.x > GAME_WIDTH) ||
+            (mothership.direction === 'left' && mothership.x + mothership.width < 0)) {
+            mothership.alive = false;
+            mothership.sound.pause();
+            mothership.sound.currentTime = 0; // Reset sound
+        }
+    }
+});
+
+// Remove dead motherships and stop their sounds
+motherships = motherships.filter(mothership => {
+    if (!mothership.alive) {
+        mothership.sound.pause();
+        mothership.sound.currentTime = 0;
+        return false; // Remove from array
+    }
+    return true;
+});
 
             // Spawn Motherships
             if (Date.now() - lastMothershipTime > mothershipInterval) {
@@ -1035,68 +1056,70 @@ function drawShields() {
         function draw() {
             // Clear fireworks before drawing new frames
             fireworks = fireworks.filter(firework => firework.timer > 0);
-            // Clear Canvas
-            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+			// Clear Canvas
+			ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+	
+	
+	
+			if (playerRespawning) {
+				// Dim the screen
+				ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+				ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-if (playerRespawning) {
-    // Dim the screen
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+				// Draw explosions while paused
+				explosions.forEach(explosion => {
+					ctx.fillStyle = explosion.color;
+					ctx.beginPath();
+					ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
+					ctx.fill();
+				});
 
-    // Draw explosions while paused
-    explosions.forEach(explosion => {
-        ctx.fillStyle = explosion.color;
-        ctx.beginPath();
-        ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
-        ctx.fill();
-    });
+				// Display countdown text
+				ctx.font = '14px "Press Start 2P"';
+				ctx.textAlign = 'center';
+				ctx.fillStyle = 'white';
+				ctx.fillText(`Respawning in ${respawnCountdown}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
 
-    // Display countdown text
-    ctx.font = '48px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'white';
-    ctx.fillText(`Respawning in ${respawnCountdown}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
-
-    return; // Skip drawing the rest during countdown
-}
+				return; // Skip drawing the rest during countdown
+			}
             if (gameState === 'start') {
                 // Dim screen handled by overlay
                 return;
             }
 
-if (gameState === 'countdown') {
+			if (gameState === 'countdown') {
 
-        const now = Date.now();
-        const elapsed = now - countdownStartTime;
-        let remaining = 3 - Math.floor(elapsed / 1000);
-        if (remaining < 0) remaining = 0; // Prevent negative numbers
-    
-            
-    
-    // Dim the background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+					const now = Date.now();
+					const elapsed = now - countdownStartTime;
+					let remaining = 3 - Math.floor(elapsed / 1000);
+					if (remaining < 0) remaining = 0; // Prevent negative numbers
+				
+						
+				
+				// Dim the background
+				ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+				ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    // Draw the game layout in the background
-    drawShields();
-    drawEnemies();
-    drawPlayer();
-    drawMotherships();
-    drawExplosions();
-    
-    // Draw Countdown Overlay
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
-    ctx.fillStyle = 'white';
+				// Draw the game layout in the background
+				drawShields();
+				drawEnemies();
+				drawPlayer();
+				drawMotherships();
+				drawExplosions();
+				
+				// Draw Countdown Overlay
+				ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+				ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
+				ctx.fillStyle = 'white';
 
-    ctx.font = isMobileDevice() ? '30px Arial' : '36px Arial';
-    
-    ctx.textAlign = 'center';
-    ctx.fillText(`Level ${currentLevel + 1} starting in ${remaining}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
-    ctx.textAlign = 'left';
+				ctx.font = isMobileDevice() ? '30px Arial' : '36px Arial';
+				
+				ctx.textAlign = 'center';
+				ctx.fillText(`Level ${currentLevel + 1} starting in ${remaining}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+				ctx.textAlign = 'left';
 
-    return; // Skip the rest of the draw cycle during countdown
-}
+				return; // Skip the rest of the draw cycle during countdown
+			}
 
             // Draw Player with Image
             if (!player.isExploding) {
@@ -1141,30 +1164,30 @@ if (gameState === 'countdown') {
                 ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
             });
 
-// Draw Shields with Image Masking
-shields.forEach(shield => {
-    shield.segments.forEach(segment => {
-        if (segment.intact) {
-            // Draw intact part of the shield using the image
-            if (shieldImage.complete && shieldImage.naturalHeight !== 0) {
-                ctx.drawImage(
-                    shieldImage, // Source image
-                    shield.x + segment.x, // X position
-                    shield.y + segment.y, // Y position
-                    segment.width, // Width
-                    segment.height // Height
-                );
-            } else {
-                // Fallback if image isn't loaded
-                ctx.fillStyle = 'green';
-                ctx.fillRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
-            }
-        } else {
-            // Damaged segment - Render transparency to simulate a 'chip'
-            ctx.clearRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
-        }
-    });
-});
+			// Draw Shields with Image Masking
+			shields.forEach(shield => {
+				shield.segments.forEach(segment => {
+					if (segment.intact) {
+						// Draw intact part of the shield using the image
+						if (shieldImage.complete && shieldImage.naturalHeight !== 0) {
+							ctx.drawImage(
+								shieldImage, // Source image
+								shield.x + segment.x, // X position
+								shield.y + segment.y, // Y position
+								segment.width, // Width
+								segment.height // Height
+							);
+						} else {
+							// Fallback if image isn't loaded
+							ctx.fillStyle = 'green';
+							ctx.fillRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
+						}
+					} else {
+						// Damaged segment - Render transparency to simulate a 'chip'
+						ctx.clearRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
+					}
+				});
+			});
 
             // Draw Motherships
             motherships.forEach(mothership => {
@@ -1173,25 +1196,25 @@ shields.forEach(shield => {
                         ctx.drawImage(mothershipImage, mothership.x, mothership.y, mothership.width, mothership.height);
                     } else {
                         // Fallback to rectangle if image is not ready
-if (mothershipImage.complete && mothershipImage.naturalHeight !== 0) {
-    ctx.drawImage(mothershipImage, mothership.x, mothership.y, mothership.width, mothership.height);
-} else {
-    // Fallback to rectangle if image is not ready
-    ctx.fillStyle = 'purple';
-    ctx.fillRect(mothership.x, mothership.y, mothership.width, mothership.height);
-}
+					if (mothershipImage.complete && mothershipImage.naturalHeight !== 0) {
+						ctx.drawImage(mothershipImage, mothership.x, mothership.y, mothership.width, mothership.height);
+					} else {
+						// Fallback to rectangle if image is not ready
+						ctx.fillStyle = 'purple';
+						ctx.fillRect(mothership.x, mothership.y, mothership.width, mothership.height);
+					}
                     }
                     // Optional: Add more details to mothership
                 }
             });
 
-// Draw Scatter Explosions
-explosions.forEach(explosion => {
-    ctx.fillStyle = explosion.color; // Random color per particle
-    ctx.beginPath();
-    ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
-    ctx.fill();
-});
+			// Draw Scatter Explosions
+			explosions.forEach(explosion => {
+				ctx.fillStyle = explosion.color; // Random color per particle
+				ctx.beginPath();
+				ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
+				ctx.fill();
+			});
 
 
             // Draw Fireworks
@@ -1204,13 +1227,28 @@ explosions.forEach(explosion => {
                 });
             });
 
-            // Draw Score and Lives
-            ctx.fillStyle = 'white';
+			// Draw Score (Top Left)
+			const padding = 20; // Space from the edges
+			const textHeight = 30; // Height for text placement
+			const retroFont = '24px PressStart2P'; // Retro-styled font
+			const retroColor = '#00FF00'; // Classic arcade green color
 
-            ctx.font = isMobileDevice() ? '16px Arial' : '20px Arial';
-            
-            ctx.fillText(`Score: ${score}`, 10, 25);
-            ctx.fillText(`Lives: ${player.lives}/3`, 10, GAME_HEIGHT - 10);
+
+
+
+
+			ctx.fillStyle = retroColor;
+			ctx.font = '14px "Press Start 2P"';
+			ctx.textAlign = 'left';
+			ctx.fillText(`SCORE: ${score}`, padding, textHeight);
+
+			// Draw Player Lives (Top Right)
+			ctx.textAlign = 'right';
+			ctx.fillText(`LIVES: ${player.lives}/3`, GAME_WIDTH - padding, textHeight);
+
+
+
+
 
             // If Paused
             if (gameState === 'paused') {
@@ -1338,10 +1376,10 @@ function spawnMothership() {
 
     // 80% chance for slow, 20% chance for fast mothership
     if (Math.random() < 0.8) {
-        speed = 1.0; // Slow speed
+        speed = 1.5; // Slow speed
         sound = "ufo_lowpitch.wav";
     } else {
-        speed = 2.0; // Fast speed
+        speed = 3.0; // Fast speed
         sound = "ufo_highpitch.wav";
     }
 
@@ -1354,14 +1392,13 @@ function spawnMothership() {
         direction: direction,
         alive: true,
         points: speed === 1.5 ? 50 : 200, // Adjust points based on speed
+        sound: new Audio(sound), // Assign the sound for this mothership
     };
 
-    motherships.push(mothership);
+    mothership.sound.loop = true; // Enable looping
+    mothership.sound.play(); // Start playing the sound
 
-    // Play the appropriate sound
-    const mothershipSound = new Audio(sound);
-    mothershipSound.currentTime = 0;
-    mothershipSound.play();
+    motherships.push(mothership);
 }
 
         // Create Fireworks
