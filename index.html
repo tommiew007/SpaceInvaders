@@ -6,13 +6,15 @@
     <meta property="og:title" content="Space Invaders Reimagined (Alpha, 2025)">
     <meta property="og:description" content="A modern rework of the classic Space Invaders. Navigate your ship, dodge lasers, and fight alien invaders in this early alpha version.">
     <meta property="og:image" content="preview.png">
-    <meta property="og:url" content="https://tommiew007.github.io/SpaceInvaders/>
+    <meta property="og:url" content="https://tommiew007.github.io/SpaceInvaders/" />
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Space Invaders Reimagined (Alpha, 2025)">
     <meta name="twitter:description" content="A reimagined classic in alpha. Play now!">
     <meta name="twitter:image" content="preview.png">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- Rest of your head content -->
+</head>
 
     <style>
         body {
@@ -85,13 +87,21 @@
                 opacity: 0;
             }
         }
+		#gameOverOverlay {
+			z-index: 3; /* Ensure it's above other overlays */
+			background-color: rgba(0, 0, 0, 0.85);
+		}
     </style>
 </head>
 <body>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
 
     <!-- Overlays -->
-    <div id="startOverlay" class="overlay">
+	<div id="gameOverOverlay" class="overlay hidden">
+		<h1>GAME OVER</h1>
+		<p>Your Score: <span id="finalScore">0</span></p>
+		<button onclick="restartGame()">Restart</button>
+	</div>    <div id="startOverlay" class="overlay">
         <h1>Space Invaders</h1>
             <p id="startMessage">Press <strong>Spacebar</strong> to Start</p>
 
@@ -128,11 +138,27 @@
         const mothershipImage = new Image();
         mothershipImage.src = 'saucer@2x.png'; // Preload mothership image
         const playerImage = new Image();
-        playerImage.src = 'play@2x.png'; // Preload player image
+        playerImage.src = 'play@2x.gif'; // Preload player image
 
         const retroFont = '24px "Press Start 2P"';
         const shieldImage = new Image();
         shieldImage.src = 'shield@2a.png'; // Replace with the actual path to your shield image
+
+		// Define mothership types with fixed attributes
+		const MOTHERSHIP_TYPES = {
+			SLOW: {
+				type: 'slow',
+				speed: 1.0, // Units per frame
+				points: 50,
+				sound: 'ufo_lowpitch.wav'
+			},
+			FAST: {
+				type: 'fast',
+				speed: 3.0, // Units per frame
+				points: 200,
+				sound: 'ufo_highpitch.wav'
+			}
+		};
 
         const alienImages = {
             1: [new Image(), new Image()], // Alien 1
@@ -249,6 +275,38 @@
         const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
 
         // Create Fireworks
+		function restartGame() {
+			// Reset game variables
+			score = 0;
+			currentLevel = 1;
+			gameOver = false;
+			
+			// Reset canvas filter
+			canvas.style.filter = 'none';
+			
+			// Hide the Game Over overlay
+			document.getElementById('gameOverOverlay').classList.add('hidden');
+			
+			// Re-initialize enemies, shields, etc.
+			initEnemies(currentLevel);
+			resetShields();
+			
+			// Reset player
+			player.x = GAME_WIDTH / 2 - playerWidth / 2;
+			player.y = GAME_HEIGHT - playerHeight - 40;
+			player.lives = 3;
+			
+			// Reset other game elements as needed
+			enemyBullets = [];
+			fireworks = [];
+			explosions = [];
+			motherships = [];
+			
+			// Start the game loop
+			gameState = 'playing';
+			gameLoop();
+		}
+
         function createFireworks() {
             fireworksSound.currentTime = 0;
             fireworksSound.play();
@@ -268,52 +326,49 @@
             }
         }
 
-        function simulateMothershipHit() {
-            const activeMothership = motherships.find(mothership => mothership.alive);
+function simulateMothershipHit() {
+    const activeMothership = motherships.find(mothership => mothership.alive);
 
-            if (activeMothership) {
-                let points = 0;
+    if (activeMothership) {
+        let points = activeMothership.points;
 
-                if (activeMothership.speed === .5) {
-                    // Slow mothership
-                    points = 50;
-                    console.log('Slow mothership destroyed! Awarded 50 points.');
-                } else if (activeMothership.speed === 2.0) {
-                    // Fast mothership
-                    points = 200;
-                    player.lives += 1; // Add a new life
-                    console.log('Fast mothership destroyed! Awarded 200 points and gained an extra life.');
-                }
-
-                // Update score
-                score += points;
-
-                // Mark mothership as not alive
-                activeMothership.alive = false;
-
-                // Play hit sound
-                mothershipHitSound.currentTime = 0;
-                mothershipHitSound.play();
-
-                // Create explosion effect at mothership's position
-                createExplosion(
-                    activeMothership.x + activeMothership.width / 2,
-                    activeMothership.y + activeMothership.height / 2
-                );
-
-                console.log(`Mothership hit: awarded ${points} points.`);
-
-                // Check win condition
-                if (enemies.every(e => !e.alive)) {
-                    createFireworks();
-                    gameState = 'countdown';
-                    countdownStartTime = Date.now();
-                }
-            } else {
-                console.log('No active mothership to strike.');
-                // Optional: Display a temporary message on the screen
-            }
+        // Grant a new life if the mothership is fast
+        if (activeMothership.type === 'fast') {
+            player.lives += 1; // Add a new life
+            console.log('Fast mothership destroyed! Player gains an extra life.');
+        } else {
+            console.log('Slow mothership destroyed! Awarded 50 points.');
         }
+
+        // Update score
+        score += points;
+
+        // Mark mothership as not alive
+        activeMothership.alive = false;
+
+        // Play hit sound
+        mothershipHitSound.currentTime = 0;
+        mothershipHitSound.play();
+
+        // Create explosion effect at mothership's position
+        createExplosion(
+            activeMothership.x + activeMothership.width / 2,
+            activeMothership.y + activeMothership.height / 2
+        );
+
+        console.log(`Mothership hit: awarded ${points} points.`);
+
+        // Check win condition
+        if (enemies.every(e => !e.alive)) {
+            createFireworks();
+            gameState = 'countdown';
+            countdownStartTime = Date.now();
+        }
+    } else {
+        console.log('No active mothership to strike.');
+        // Optional: Display a temporary message on the screen
+    }
+}
 
 
         function togglePause() {
@@ -604,11 +659,25 @@
             }
         }
 
-        function showGameOver() {
-            gameOverSound.play();
-            alert(`Game Over!\nYour Score: ${score}`);
-            document.location.reload();
-        }
+		function showGameOver() {
+			gameOverSound.play();
+			gameState = 'gameover';
+			
+			// Apply grayscale filter to the canvas
+			canvas.style.filter = 'grayscale(100%)';
+			
+			// Display "Game Over" message on the canvas
+			ctx.fillStyle = 'white';
+			ctx.font = isMobileDevice() ? '48px "Press Start 2P"' : '48px "Press Start 2P"';
+			ctx.textAlign = 'center';
+			ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2);
+			// Update final score
+			document.getElementById('finalScore').textContent = score;
+			
+			// Show the Game Over overlay
+			document.getElementById('gameOverOverlay').classList.remove('hidden');
+}			
+			// Optionally, you can add a "Restart" button or instructions here
     if (isMobileDevice()) {
         let touchStartX = 0;
 
@@ -647,26 +716,37 @@
     }
 
         // Game Loop
-    function gameLoop() {
-        const now = Date.now();
-        const deltaTime = (now - lastUpdateTime) / 1000; // Time elapsed in seconds
-        lastUpdateTime = now; // Update the time tracker
+		function gameLoop() {
+			const now = Date.now();
+			const deltaTime = (now - lastUpdateTime) / 1000; // Time elapsed in seconds
+			lastUpdateTime = now; // Update the time tracker
 
-        if (!playerRespawning) {
-            update(deltaTime); // Pass deltaTime to update logic only if not respawning
-        } else {
-            console.log('Skipping game loop during respawn...');
-        }
+			if (!playerRespawning && gameState === 'playing') {
+				update(deltaTime); // Update game logic only if not respawning and playing
+			}
 
-        draw(); // Drawing should continue regardless of state
+			draw(); // Always draw the current state
 
-        if (!gameOver) {
-            requestAnimationFrame(gameLoop);
-        }
-    }
-
+			if (!gameOver) {
+				requestAnimationFrame(gameLoop);
+			}
+		}
         // Update Game State
         function update(deltaTime) {
+			if (gameState === 'gameover') {
+				// No further updates needed
+				return;
+			}
+
+			if (playerRespawning) {
+				// Existing respawn logic...
+			}
+
+			if (gameState === 'countdown') {
+				// Existing countdown logic...
+			}
+
+			if (gameState !== 'playing') return;
         if (playerRespawning) {
             // Update explosions while paused
             console.log('Player is respawning, skipping update.');
@@ -740,78 +820,75 @@
 
 
             // Update Player Bullets
-            player.bullets.forEach((bullet, index) => {
-                bullet.y -= playerBulletSpeed * deltaTime * 60;
-                // Remove bullet if it goes off screen
-                if (bullet.y + bullet.height < 0) {
-                    player.bullets.splice(index, 1);
-                } else {
-                    let hit = false;
+// Update Player Bullets
+player.bullets.forEach((bullet, index) => {
+    bullet.y -= playerBulletSpeed * deltaTime * 60;
+    // Remove bullet if it goes off screen
+    if (bullet.y + bullet.height < 0) {
+        player.bullets.splice(index, 1);
+    } else {
+        let hit = false;
 
-                    // Check collision with enemies
-                    enemies.forEach((enemy, eIndex) => {
-                        if (enemy.alive && isColliding(bullet, enemy)) {
-                            enemy.alive = false;
-                            enemyHitSound.currentTime = 0;
-                            enemyHitSound.play();
-                            player.bullets.splice(index, 1);
-                            score += 10;
-                                createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
-                            // Adjust enemy speed based on remaining enemies
-                            adjustEnemySpeed();
-                            hit = true;
-                        }
-                    });
-
-                    if (hit) return; // Bullet already handled
-
-                    // Check collision with shields
-                    shields.forEach((shield) => {
-                        shield.segments.forEach((segment) => {
-                            if (segment.intact && isColliding(bullet, {
-                                x: shield.x + segment.x,
-                                y: shield.y + segment.y,
-                                width: segment.width,
-                                height: segment.height
-                            })) {
-                                segment.intact = false;
-                                player.bullets.splice(index, 1);
-                                hit = true;
-                            }
-                        });
-                    });
-
-                    if (hit) return; // Bullet already handled
-
-                    // Check collision with motherships
-    // Check collision with motherships
-    motherships.forEach((mothership, mIndex) => {
-        if (mothership.alive && isColliding(bullet, mothership)) {
-            let points = 0;
-            
-            if (mothership.speed === .5) {
-                // Slow mothership
-                points = 50;
-                console.log('Slow mothership destroyed!  ');
-            } else if (mothership.speed === 2.0) {
-                // Fast mothership
-                points = 200;
-                player.lives += 1; // Add a new life
-                console.log('Fast mothership destroyed! Player gains an extra life.');
+        // Check collision with enemies
+        enemies.forEach((enemy, eIndex) => {
+            if (enemy.alive && isColliding(bullet, enemy)) {
+                enemy.alive = false;
+                enemyHitSound.currentTime = 0;
+                enemyHitSound.play();
+                player.bullets.splice(index, 1);
+                score += 10;
+                createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+                // Adjust enemy speed based on remaining enemies
+                adjustEnemySpeed();
+                hit = true;
             }
-            
-            score += points;
-            mothership.alive = false;
-            mothershipHitSound.currentTime = 0;
-            mothershipHitSound.play();
-            player.bullets.splice(index, 1);
-            createExplosion(mothership.x + mothership.width / 2, mothership.y + mothership.height / 2);
-            hit = true;
-        }
-    });
+        });
 
+        if (hit) return; // Bullet already handled
+
+        // Check collision with shields
+        shields.forEach((shield) => {
+            shield.segments.forEach((segment) => {
+                if (segment.intact && isColliding(bullet, {
+                    x: shield.x + segment.x,
+                    y: shield.y + segment.y,
+                    width: segment.width,
+                    height: segment.height
+                })) {
+                    segment.intact = false;
+                    player.bullets.splice(index, 1);
+                    hit = true;
                 }
             });
+        });
+
+        if (hit) return; // Bullet already handled
+
+        // Check collision with motherships
+        motherships.forEach((mothership, mIndex) => {
+            if (mothership.alive && isColliding(bullet, mothership)) {
+                let points = mothership.points;
+
+                if (mothership.type === 'fast') {
+                    player.lives += 1; // Grant an extra life
+                    console.log('Fast mothership destroyed! Player gains an extra life.');
+                } else {
+                    console.log('Slow mothership destroyed! Awarded 50 points.');
+                }
+
+                score += points;
+                mothership.alive = false;
+                mothershipHitSound.currentTime = 0;
+                mothershipHitSound.play();
+                player.bullets.splice(index, 1);
+                createExplosion(mothership.x + mothership.width / 2, mothership.y + mothership.height / 2);
+                hit = true;
+            }
+        });
+
+    }
+});
+
 
             // Calculate enemy speed based on the number of remaining enemies
             enemySpeed = calculateEnemySpeed();
@@ -1116,68 +1193,33 @@
     }
 
         // Draw Game State
-    function draw() {
-        // Clear fireworks before drawing new frames
-        fireworks = fireworks.filter(firework => firework.timer > 0);
-        // Clear Canvas
-        ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+function draw() {
+    // Clear fireworks before drawing new frames
+    fireworks = fireworks.filter(firework => firework.timer > 0);
+    // Clear Canvas
+    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-        if (playerRespawning) {
-            // Apply grayscale filter (already handled in resetPlayer())
-            // No need to dim the screen manually
+    if (playerRespawning) {
+        // Existing respawn logic...
+    }
 
-            // Draw explosions during respawn
-            explosions.forEach(explosion => {
-                ctx.fillStyle = explosion.color;
-                ctx.beginPath();
-                ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
-                ctx.fill();
-            });
+    if (gameState === 'start') {
+        // Existing start overlay logic...
+        return;
+    }
 
-            // Display countdown text
-            ctx.font = '14px "Press Start 2P"';
-            ctx.textAlign = 'center';
-            ctx.fillStyle = 'white';
-            ctx.fillText(`Respawning in ${respawnCountdown}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    if (gameState === 'countdown') {
+        // Existing countdown logic...
+        return;
+    }
 
-            // **Remove the return statement to continue drawing the rest of the game**
-            // return; // Comment out or remove this line
-        }
+    if (gameState === 'gameover') {
+        // The Game Over overlay handles the message, so no need to draw anything here
+        return;
+    }
 
-        if (gameState === 'start') {
-            // Dim screen handled by overlay
-            return;
-        }
-
-        if (gameState === 'countdown') {
-            // Draw countdown overlay
-            const now = Date.now();
-            const elapsed = now - countdownStartTime;
-            let remaining = 3 - Math.floor(elapsed / 1000);
-            if (remaining < 0) remaining = 0; // Prevent negative numbers
-
-            // Dim the background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
-
-            // Draw game elements in the background
-            drawShields();
-            drawEnemies();
-            drawPlayer();
-            drawMotherships();
-            drawExplosions();
-
-            // Draw Countdown Text
-            ctx.fillStyle = 'white';
-            ctx.font = isMobileDevice() ? '30px Arial' : '36px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`Level ${currentLevel + 1} starting in ${remaining}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
-            ctx.textAlign = 'left';
-
-            return; // Skip the rest of the draw cycle during countdown
-        }
-
-        // **Continue drawing all game elements regardless of respawn state**
+    if (gameState === 'playing') {
+        // Drawing game elements only when playing
         // Draw Player
         drawPlayer();
 
@@ -1197,10 +1239,6 @@
         });
 
         drawShields();          // Draw shields first
-        drawPlayer();           // Then player
-      //  drawPlayerBullets();    // Then player bullets
-        drawEnemies();          // Then enemies
-      //  drawEnemyBullets();     // Then enemy bullets
         drawMotherships();      // Then motherships
         drawExplosions();       // Then explosions
         drawFireworks();        // Then fireworks
@@ -1219,19 +1257,20 @@
         ctx.textAlign = 'right';
         ctx.fillText(`LIVES: ${player.lives}/3`, GAME_WIDTH - padding, textHeight);
         ctx.textAlign = 'left';
-
-        // If Paused
-        if (gameState === 'paused') {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
-            ctx.fillStyle = 'white';
-            ctx.font = isMobileDevice() ? '24px Arial' : '30px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
-            ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
-            ctx.textAlign = 'left';
-        }
     }
+
+    // Handle 'paused' state separately to ensure the overlay is drawn
+    if (gameState === 'paused') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
+        ctx.fillStyle = 'white';
+        ctx.font = isMobileDevice() ? '24px Arial' : '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
+        ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
+        ctx.textAlign = 'left';
+    }
+}
 
 
         // Collision Detection
@@ -1374,43 +1413,42 @@
         }
 
         // Spawn Mothership
-    function spawnMothership() {
-        // Check if a mothership is already active
-        if (motherships.some(mothership => mothership.alive)) {
-            console.log('Mothership already active. Not spawning a new one.');
-            return;
-        }
-
-        const direction = Math.random() < 0.5 ? 'right' : 'left';
-        let speed, sound;
-
-        // 80% chance for slow, 20% chance for fast mothership
-        if (Math.random() < 0.8) {
-            speed = .5; // Slow speed
-            sound = "ufo_lowpitch.wav";
-        } else {
-            speed = 2.0; // Fast speed
-            sound = "ufo_highpitch.wav";
-        }
-
-        const mothership = {
-            x: direction === 'right' ? -80 : GAME_WIDTH,
-            y: 30,
-            width: 80,
-            height: 20,
-            speed: speed * (direction === 'right' ? 1 : -1),
-            direction: direction,
-            alive: true,
-            points: speed === 1.0 ? 50 : 200, // Adjust points based on speed
-            sound: new Audio(sound), // Assign the sound for this mothership
-        };
-
-        mothership.sound.loop = true; // Enable looping
-        mothership.sound.play(); // Start playing the sound
-
-        motherships.push(mothership);
-        console.log(`Spawned a ${speed === .5 ? 'slow' : 'fast'} mothership moving ${direction}.`);
+function spawnMothership() {
+    // Check if a mothership is already active
+    if (motherships.some(mothership => mothership.alive)) {
+        console.log('Mothership already active. Not spawning a new one.');
+        return;
     }
+
+    // Determine spawn direction
+    const direction = Math.random() < 0.5 ? 'right' : 'left';
+
+    // Decide mothership type based on probability
+    const isFast = Math.random() < 0.2; // 20% chance for fast
+    const selectedType = isFast ? MOTHERSHIP_TYPES.FAST : MOTHERSHIP_TYPES.SLOW;
+
+    // Create the mothership object with fixed speed based on type
+    const mothership = {
+        x: direction === 'right' ? -80 : GAME_WIDTH, // Spawn off-screen
+        y: 30,
+        width: 80,
+        height: 20,
+        speed: selectedType.speed * (direction === 'right' ? 1 : -1), // Directional speed
+        direction: direction,
+        alive: true,
+        type: selectedType.type,
+        points: selectedType.points,
+        sound: new Audio(selectedType.sound), // Assign sound based on type
+    };
+
+    // Play mothership sound
+    mothership.sound.loop = true; // Enable looping for continuous sound
+    mothership.sound.play(); // Start playing the sound
+
+    // Add the mothership to the array
+    motherships.push(mothership);
+    console.log(`Spawned a ${selectedType.type} mothership moving ${direction}.`);
+}
 
         // Start Next Level
     function startNextLevel() {
