@@ -144,6 +144,13 @@
         const shieldImage = new Image();
         shieldImage.src = 'shield@2a.png'; // Replace with the actual path to your shield image
 
+		// Preload mothership sounds
+		const mothershipSlowSound = new Audio('ufo_lowpitch.wav');
+		mothershipSlowSound.loop = true; // Enable looping
+
+		const mothershipFastSound = new Audio('ufo_highpitch.wav');
+		mothershipFastSound.loop = true; // Enable looping
+
 		// Define mothership types with fixed attributes
 		const MOTHERSHIP_TYPES = {
 			SLOW: {
@@ -154,7 +161,7 @@
 			},
 			FAST: {
 				type: 'fast',
-				speed: 3.0, // Units per frame
+				speed: 2.0, // Units per frame
 				points: 200,
 				sound: 'ufo_highpitch.wav'
 			}
@@ -273,6 +280,24 @@
 
         // Colors for each enemy row
         const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
+
+		// Example: Destroy mothership when hit or out of bounds
+
+// Ensure the sound loops by replaying it when it ends
+//mothership.sound.addEventListener('ended', () => {
+//    if (mothership.alive) {
+//        mothership.sound.currentTime = 0;
+//        mothership.sound.play();
+//    }
+//});
+
+
+		function destroyMothership(mothership) {
+			mothership.alive = false;
+			mothership.sound.pause(); // Pause the sound
+			mothership.sound.currentTime = 0; // Reset to start
+			console.log(`Destroyed a ${mothership.type} mothership.`);
+		}
 
         // Create Fireworks
 		function restartGame() {
@@ -877,7 +902,8 @@ player.bullets.forEach((bullet, index) => {
                 }
 
                 score += points;
-                mothership.alive = false;
+				destroyMothership(mothership); 
+				mothership.alive = false;
                 mothershipHitSound.currentTime = 0;
                 mothershipHitSound.play();
                 player.bullets.splice(index, 1);
@@ -1420,30 +1446,29 @@ function spawnMothership() {
         return;
     }
 
-    // Determine spawn direction
     const direction = Math.random() < 0.5 ? 'right' : 'left';
-
-    // Decide mothership type based on probability
     const isFast = Math.random() < 0.2; // 20% chance for fast
     const selectedType = isFast ? MOTHERSHIP_TYPES.FAST : MOTHERSHIP_TYPES.SLOW;
 
-    // Create the mothership object with fixed speed based on type
+    // Select the appropriate preloaded sound
+    const selectedSound = isFast ? mothershipFastSound : mothershipSlowSound;
+
     const mothership = {
-        x: direction === 'right' ? -80 : GAME_WIDTH, // Spawn off-screen
+        x: direction === 'right' ? -80 : GAME_WIDTH,
         y: 30,
         width: 80,
         height: 20,
-        speed: selectedType.speed * (direction === 'right' ? 1 : -1), // Directional speed
+        speed: selectedType.speed * (direction === 'right' ? 1 : -1),
         direction: direction,
         alive: true,
         type: selectedType.type,
         points: selectedType.points,
-        sound: new Audio(selectedType.sound), // Assign sound based on type
+        sound: selectedSound, // Assign the preloaded sound
     };
 
     // Play mothership sound
-    mothership.sound.loop = true; // Enable looping for continuous sound
-    mothership.sound.play(); // Start playing the sound
+    mothership.sound.currentTime = 0; // Reset to start in case it's reused
+    mothership.sound.play();
 
     // Add the mothership to the array
     motherships.push(mothership);
