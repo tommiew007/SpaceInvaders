@@ -642,16 +642,16 @@ function simulateMothershipHit() {
                 keys['ControlFired'] = false;
             }
         });
-        function toggleDirections() {
-            const directionsOverlay = document.getElementById('directionsOverlay');
-            if (directionsOverlay.classList.contains('hidden')) {
-                directionsOverlay.classList.remove('hidden');
-                gameState = 'paused'; // Pause the game when help is shown
-            } else {
-                directionsOverlay.classList.add('hidden');
-                gameState = 'playing'; // Resume the game when help is hidden
-            }
-        }
+function toggleDirections() {
+    const directionsOverlay = document.getElementById('directionsOverlay');
+    if (directionsOverlay.classList.contains('hidden')) {
+        directionsOverlay.classList.remove('hidden');
+        gameState = 'paused'; // Pause the game when help is shown
+    } else {
+        directionsOverlay.classList.add('hidden');
+        gameState = 'playing'; // Resume the game when help is hidden
+    }
+}
 
         function startGame() {
             startOverlay.classList.add('hidden');
@@ -684,24 +684,21 @@ function simulateMothershipHit() {
             }
         }
 
-		function showGameOver() {
-			gameOverSound.play();
-			gameState = 'gameover';
-			
-			// Apply grayscale filter to the canvas
-			canvas.style.filter = 'grayscale(100%)';
-			
-			// Display "Game Over" message on the canvas
-			ctx.fillStyle = 'white';
-			ctx.font = isMobileDevice() ? '48px "Press Start 2P"' : '48px "Press Start 2P"';
-			ctx.textAlign = 'center';
-			ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2);
-			// Update final score
-			document.getElementById('finalScore').textContent = score;
-			
-			// Show the Game Over overlay
-			document.getElementById('gameOverOverlay').classList.remove('hidden');
-}			
+function showGameOver() {
+    gameOverSound.play();
+    gameState = 'gameover';
+
+    // Apply grayscale filter if not already applied
+    if (!canvas.style.filter.includes('grayscale')) {
+        canvas.style.filter = 'grayscale(100%)';
+    }
+
+    // Update final score
+    document.getElementById('finalScore').textContent = score;
+
+    // Show the Game Over overlay
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
 			// Optionally, you can add a "Restart" button or instructions here
     if (isMobileDevice()) {
         let touchStartX = 0;
@@ -741,185 +738,160 @@ function simulateMothershipHit() {
     }
 
         // Game Loop
-		function gameLoop() {
-			const now = Date.now();
-			const deltaTime = (now - lastUpdateTime) / 1000; // Time elapsed in seconds
-			lastUpdateTime = now; // Update the time tracker
+function gameLoop() {
+    const now = Date.now();
+    const deltaTime = (now - lastUpdateTime) / 1000; // Time elapsed in seconds
+    lastUpdateTime = now; // Update the time tracker
 
-			if (!playerRespawning && gameState === 'playing') {
-				update(deltaTime); // Update game logic only if not respawning and playing
-			}
+    if (gameState === 'playing') {
+        update(deltaTime); // Always update game logic when playing
+    }
 
-			draw(); // Always draw the current state
+    draw(); // Always draw the current state
 
-			if (!gameOver) {
-				requestAnimationFrame(gameLoop);
-			}
-		}
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
         // Update Game State
-        function update(deltaTime) {
-			if (gameState === 'gameover') {
-				// No further updates needed
-				return;
-			}
+function update(deltaTime) {
+    if (gameState === 'gameover') {
+        // No further updates needed
+        return;
+    }
 
-			if (playerRespawning) {
-				// Existing respawn logic...
-			}
-
-			if (gameState === 'countdown') {
-				// Existing countdown logic...
-			}
-
-			if (gameState !== 'playing') return;
+    if (gameState === 'paused') {
+        // Only update visual effects like explosions
         if (playerRespawning) {
-            // Update explosions while paused
-            console.log('Player is respawning, skipping update.');
+            // Update explosions
             explosions.forEach((explosion, index) => {
                 explosion.x += explosion.vx;
                 explosion.y += explosion.vy;
-                explosion.vx *= 0.98;
-                explosion.vy *= 0.98;   
-                explosion.size *= 0.95;
+                explosion.vx *= 0.98; // Apply friction
+                explosion.vy *= 0.98;
+                explosion.size *= 0.95; // Shrink explosion
                 explosion.timer--;
+
+                // Remove explosion particle if its timer expires or it becomes too small
                 if (explosion.timer <= 0 || explosion.size < 0.5) {
                     explosions.splice(index, 1);
                 }
             });
-        
-            // Countdown Timer
-            const elapsed = Date.now() - respawnStartTime;
-            respawnCountdown = 3 - Math.floor(elapsed / 1000);
-        
-            // Respawn when countdown ends
-            if (elapsed >= 3000) {
-                playerRespawning = false;
-                player.isExploding = false;
-                player.x = GAME_WIDTH / 2 - playerWidth / 2; // Reset position
-                player.y = GAME_HEIGHT - playerHeight - 40; // Keep it aligned
-            }
-        
-            return; // Skip all other updates during countdown
+
+            // No further updates during pause
         }
 
-            if (gameState === 'countdown') {
-                const elapsed = Date.now() - countdownStartTime;
-            
-                // Transition to next level after countdown
-                if (elapsed >= countdownDuration) {
-                    startNextLevel(); // Moves to the next level
-                }
-                return; // Exit update to prevent further processing
-            }
+        return; // Skip the rest of the update during pause
+    }
 
+    if (gameState === 'countdown') {
+        const elapsed = Date.now() - countdownStartTime;
 
+        // Transition to next level after countdown
+        if (elapsed >= countdownDuration) {
+            startNextLevel(); // Move to the next level
+        }
+        return; // Exit update to prevent further processing during countdown
+    }
 
-            if (gameState !== 'playing') return;
+    if (gameState !== 'playing') return; // Skip updates if not playing
 
-            // Player Movement
-             if (keys['ArrowLeft'] && player.x > 0) {
-                player.x -= player.speed * deltaTime; // Scaled appropriately
-            }
-            if (keys['ArrowRight'] && player.x + playerWidth < GAME_WIDTH) {
-                player.x += player.speed * deltaTime; // Scaled appropriately
-            }
+    // Handle player movement
+    if (keys['ArrowLeft'] && player.x > 0) {
+        player.x -= player.speed * deltaTime;
+    }
+    if (keys['ArrowRight'] && player.x + playerWidth < GAME_WIDTH) {
+        player.x += player.speed * deltaTime;
+    }
 
-            // Fire Player Bullet
-            // Limit the player to 3 bullets at a time
-            if (
-                (keys['ControlLeft'] || keys['ControlRight']) && // Fire button pressed
-                !keys['ControlFired'] &&                        // Not already firing
-                player.bullets.length < 3                       // Bullet count limit
-            ) {
-                player.bullets.push({
-                    x: player.x + player.width / 2 - 2.5, // Centered bullet
-                    y: player.y,
-                    width: 5,
-                    height: 15,
-                    color: 'blue'
-                });
-                fireSound.currentTime = 0;
-                fireSound.play();
-                keys['ControlFired'] = true; // Prevent rapid fire
-            }
-
-
-            // Update Player Bullets
-// Update Player Bullets
-player.bullets.forEach((bullet, index) => {
-    bullet.y -= playerBulletSpeed * deltaTime * 60;
-    // Remove bullet if it goes off screen
-    if (bullet.y + bullet.height < 0) {
-        player.bullets.splice(index, 1);
-    } else {
-        let hit = false;
-
-        // Check collision with enemies
-        enemies.forEach((enemy, eIndex) => {
-            if (enemy.alive && isColliding(bullet, enemy)) {
-                enemy.alive = false;
-                enemyHitSound.currentTime = 0;
-                enemyHitSound.play();
-                player.bullets.splice(index, 1);
-                score += 10;
-                createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
-                // Adjust enemy speed based on remaining enemies
-                adjustEnemySpeed();
-                hit = true;
-            }
+    // Fire player bullets
+    if (
+        (keys['ControlLeft'] || keys['ControlRight']) && // Fire button pressed
+        !keys['ControlFired'] &&                        // Not already firing
+        player.bullets.length < 3                       // Bullet count limit
+    ) {
+        player.bullets.push({
+            x: player.x + player.width / 2 - 2.5,
+            y: player.y,
+            width: 5,
+            height: 15,
+            color: 'blue'
         });
+        fireSound.currentTime = 0;
+        fireSound.play();
+        keys['ControlFired'] = true; // Prevent rapid fire
+    }
 
-        if (hit) return; // Bullet already handled
+    // Update player bullets
+    player.bullets.forEach((bullet, index) => {
+        bullet.y -= playerBulletSpeed * deltaTime * 60; // Scale speed appropriately
 
-        // Check collision with shields
-        shields.forEach((shield) => {
-            shield.segments.forEach((segment) => {
-                if (segment.intact && isColliding(bullet, {
-                    x: shield.x + segment.x,
-                    y: shield.y + segment.y,
-                    width: segment.width,
-                    height: segment.height
-                })) {
-                    segment.intact = false;
+        // Remove bullet if it goes off-screen
+        if (bullet.y + bullet.height < 0) {
+            player.bullets.splice(index, 1);
+        } else {
+            let hit = false;
+
+            // Check collision with enemies
+            enemies.forEach((enemy, eIndex) => {
+                if (enemy.alive && isColliding(bullet, enemy)) {
+                    enemy.alive = false;
+                    enemyHitSound.currentTime = 0;
+                    enemyHitSound.play();
                     player.bullets.splice(index, 1);
+                    score += 10;
+                    createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+                    adjustEnemySpeed();
                     hit = true;
                 }
             });
-        });
 
-        if (hit) return; // Bullet already handled
+            if (hit) return; // Bullet already handled
 
-        // Check collision with motherships
-        motherships.forEach((mothership, mIndex) => {
-            if (mothership.alive && isColliding(bullet, mothership)) {
-                let points = mothership.points;
+            // Check collision with shields
+            shields.forEach((shield) => {
+                shield.segments.forEach((segment) => {
+                    if (segment.intact && isColliding(bullet, {
+                        x: shield.x + segment.x,
+                        y: shield.y + segment.y,
+                        width: segment.width,
+                        height: segment.height
+                    })) {
+                        segment.intact = false;
+                        player.bullets.splice(index, 1);
+                        hit = true;
+                    }
+                });
+            });
 
-                if (mothership.type === 'fast') {
-                    player.lives += 1; // Grant an extra life
-                    console.log('Fast mothership destroyed! Player gains an extra life.');
-                } else {
-                    console.log('Slow mothership destroyed! Awarded 50 points.');
+            if (hit) return; // Bullet already handled
+
+            // Check collision with motherships
+            motherships.forEach((mothership, mIndex) => {
+                if (mothership.alive && isColliding(bullet, mothership)) {
+                    let points = mothership.points;
+
+                    if (mothership.type === 'fast') {
+                        player.lives += 1; // Grant an extra life
+                        console.log('Fast mothership destroyed! Player gains an extra life.');
+                    } else {
+                        console.log('Slow mothership destroyed! Awarded 50 points.');
+                    }
+
+                    score += points;
+                    destroyMothership(mothership);
+                    player.bullets.splice(index, 1);
+                    createExplosion(mothership.x + mothership.width / 2, mothership.y + mothership.height / 2);
+                    hit = true;
                 }
+            });
+        }
+    });
 
-                score += points;
-				destroyMothership(mothership); 
-				mothership.alive = false;
-                mothershipHitSound.currentTime = 0;
-                mothershipHitSound.play();
-                player.bullets.splice(index, 1);
-                createExplosion(mothership.x + mothership.width / 2, mothership.y + mothership.height / 2);
-                hit = true;
-            }
-        });
+    // Calculate and adjust enemy speed
+    enemySpeed = calculateEnemySpeed();
 
-    }
-});
-
-
-            // Calculate enemy speed based on the number of remaining enemies
-            enemySpeed = calculateEnemySpeed();
-
-            // Move enemies in 'step' fashion
+    // Move enemies in 'step' fashion
     const now = Date.now();
     if (now - lastStepTime > stepDelay) {
         let shouldMoveDown = false;
@@ -929,9 +901,9 @@ player.bullets.forEach((bullet, index) => {
                 enemy.x += (enemyWidth / 2) * enemyDirection; // Half-step horizontal movement
                 enemy.frame = 1 - enemy.frame; // Toggle frame for animation
 
-            if (enemy.x + enemy.width >= GAME_WIDTH - enemyPadding || enemy.x <= enemyPadding) {
-                shouldMoveDown = true;
-            }
+                if (enemy.x + enemy.width >= GAME_WIDTH - enemyPadding || enemy.x <= enemyPadding) {
+                    shouldMoveDown = true;
+                }
             }
         });
 
@@ -950,28 +922,28 @@ player.bullets.forEach((bullet, index) => {
         currentInvaderSound = (currentInvaderSound + 1) % invaderSounds.length;
 
         lastStepTime = now;
-        adjustStepSpeed(); // Update speed based on enemies
+        adjustEnemySpeed(); // Update speed based on enemies
     }
 
-            // Check collision between enemies and shields
-            enemies.forEach(enemy => {
-                if (enemy.alive) {
-                    shields.forEach(shield => {
-                        shield.segments.forEach(segment => {
-                            if (segment.intact && isColliding(enemy, {
-                                x: shield.x + segment.x,
-                                y: shield.y + segment.y,
-                                width: segment.width,
-                                height: segment.height
-                            })) {
-                                segment.intact = false;
-                            }
-                        });
-                    });
-                }
+    // Check collision between enemies and shields
+    enemies.forEach(enemy => {
+        if (enemy.alive) {
+            shields.forEach(shield => {
+                shield.segments.forEach(segment => {
+                    if (segment.intact && isColliding(enemy, {
+                        x: shield.x + segment.x,
+                        y: shield.y + segment.y,
+                        width: segment.width,
+                        height: segment.height
+                    })) {
+                        segment.intact = false;
+                    }
+                });
             });
+        }
+    });
 
-    // Fire Enemy Bullets
+    // Fire enemy bullets
     if (!enemyFiringDisabled && Math.random() < 0.005) { // Adjusted firing frequency
         const aliveEnemies = enemies.filter(e => e.alive);
         if (aliveEnemies.length > 0) {
@@ -986,52 +958,52 @@ player.bullets.forEach((bullet, index) => {
         }
     }
 
-            // Update Enemy Bullets
-            enemyBullets.forEach((bullet, index) => {
-                  bullet.y += bulletSpeed * deltaTime * 60; // Ensure this multiplication is intentional
-                // Remove bullet if it goes off screen
-                if (bullet.y > GAME_HEIGHT) {
-                    enemyBullets.splice(index, 1);
-                } else {
-                    let hit = false;
+    // Update enemy bullets
+    enemyBullets.forEach((bullet, index) => {
+        bullet.y += bulletSpeed * deltaTime * 60; // Scale speed appropriately
 
-                    // Check collision with shields
-                    shields.forEach((shield) => {
-                        shield.segments.forEach((segment) => {
-                            if (segment.intact && isColliding(bullet, {
-                                x: shield.x + segment.x,
-                                y: shield.y + segment.y,
-                                width: segment.width,
-                                height: segment.height
-                            })) {
-                                segment.intact = false;
-                                enemyBullets.splice(index, 1);
-                                hit = true;
-                            }
-                        });
-                    });
+        // Remove bullet if it goes off-screen
+        if (bullet.y > GAME_HEIGHT) {
+            enemyBullets.splice(index, 1);
+        } else {
+            let hit = false;
 
-                    if (hit) return; // Bullet already handled
-
-                    // Check collision with player
-                    if (isColliding(bullet, player) && !player.isExploding) {
+            // Check collision with shields
+            shields.forEach((shield) => {
+                shield.segments.forEach((segment) => {
+                    if (segment.intact && isColliding(bullet, {
+                        x: shield.x + segment.x,
+                        y: shield.y + segment.y,
+                        width: segment.width,
+                        height: segment.height
+                    })) {
+                        segment.intact = false;
                         enemyBullets.splice(index, 1);
-                        playerHitSound.currentTime = 0;
-                        playerHitSound.play();
-                        createExplosion(player.x + player.width / 2, player.y + player.height / 2);
-                         
-                        if (player.lives > 0) {
-                            resetPlayer();
-                        } else {
-                            gameOver = true;
-                            showGameOver();
-                        }
+                        hit = true;
                     }
-                }
+                });
             });
 
+            if (hit) return; // Bullet already handled
 
+            // Check collision with player
+            if (isColliding(bullet, player) && !player.isExploding) {
+                enemyBullets.splice(index, 1);
+                playerHitSound.currentTime = 0;
+                playerHitSound.play();
+                createExplosion(player.x + player.width / 2, player.y + player.height / 2);
+                 
+                if (player.lives > 0) {
+                    resetPlayer();
+                } else {
+                    gameOver = true;
+                    showGameOver();
+                }
+            }
+        }
+    });
 
+    // Update motherships
     motherships.forEach((mothership, mIndex) => {
         if (mothership.alive) {
             mothership.x += mothership.speed;
@@ -1042,6 +1014,7 @@ player.bullets.forEach((bullet, index) => {
                 mothership.alive = false;
                 mothership.sound.pause();
                 mothership.sound.currentTime = 0; // Reset sound
+                isMothershipSoundPlaying = false;
             }
         }
     });
@@ -1056,11 +1029,11 @@ player.bullets.forEach((bullet, index) => {
         return true;
     });
 
-            // Spawn Motherships
-            if (Date.now() - lastMothershipTime > mothershipInterval) {
-                spawnMothership();
-                lastMothershipTime = Date.now();
-            }
+    // Spawn Motherships
+    if (Date.now() - lastMothershipTime > mothershipInterval) {
+        spawnMothership();
+        lastMothershipTime = Date.now();
+    }
 
     // Update Explosions
     explosions.forEach((explosion, index) => {
@@ -1083,35 +1056,35 @@ player.bullets.forEach((bullet, index) => {
         }
     });
 
-
-            // Update Fireworks
-            fireworks.forEach((firework, index) => {
-                firework.timer--;
-                firework.particles.forEach((particle) => {
-                    particle.x += particle.vx;
-                    particle.y += particle.vy;
-                    particle.vy += particle.gravity;
-                });
-                if (firework.timer <= 0) {
-                    fireworks.splice(index, 1);
-                }
-            });
-
-            // Check Win Condition
-            if (enemies.every(e => !e.alive)) {
-                createFireworks();
-                gameState = 'countdown';
-                countdownStartTime = Date.now();
-            }
-
-            // Check if any enemy has reached the player's level
-            enemies.forEach(enemy => {
-                if (enemy.alive && enemy.y + enemy.height >= player.y) {
-                    gameOver = true;
-                    showGameOver();
-                }
-            });
+    // Update Fireworks
+    fireworks.forEach((firework, index) => {
+        firework.timer--;
+        firework.particles.forEach((particle) => {
+            particle.x += particle.vx;
+            particle.y += particle.vy;
+            particle.vy += particle.gravity;
+        });
+        if (firework.timer <= 0) {
+            fireworks.splice(index, 1);
         }
+    });
+
+    // Check Win Condition
+    if (enemies.every(e => !e.alive)) {
+        createFireworks();
+        gameState = 'countdown';
+        countdownStartTime = Date.now();
+    }
+
+    // Check if any enemy has reached the player's level
+    enemies.forEach(enemy => {
+        if (enemy.alive && enemy.y + enemy.height >= player.y) {
+            gameOver = true;
+            showGameOver();
+        }
+    });
+}
+
     function adjustStepSpeed() {
         const remainingEnemies = enemies.filter(enemy => enemy.alive).length;
         const totalEnemies = enemyRows * enemyCols;
@@ -1145,14 +1118,14 @@ player.bullets.forEach((bullet, index) => {
             }
         });
     }
-    function drawExplosions() {
-        explosions.forEach(explosion => {
-            ctx.fillStyle = explosion.color; // Random color per particle
-            ctx.beginPath();
-            ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    }
+function drawExplosions() {
+    explosions.forEach(explosion => {
+        ctx.fillStyle = explosion.color; // Random color per particle
+        ctx.beginPath();
+        ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
             
             
     function drawMotherships() {
@@ -1170,17 +1143,18 @@ player.bullets.forEach((bullet, index) => {
         });
     }
 
-        function drawPlayer() {
-        if (!player.isExploding) {
-            if (playerImage.complete && playerImage.naturalHeight !== 0) {
-                ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
-            } else {
-                // Fallback placeholder if the image hasn't loaded
-                ctx.fillStyle = 'green';
-                ctx.fillRect(player.x, player.y, player.width, player.height);
-            }
+function drawPlayer() {
+    if (!player.isExploding) {
+        if (playerImage.complete && playerImage.naturalHeight !== 0) {
+            ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
+        } else {
+            // Fallback placeholder if the image hasn't loaded
+            ctx.fillStyle = 'green';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
         }
     }
+}
+
 
 
     function drawShields() {
@@ -1220,32 +1194,21 @@ player.bullets.forEach((bullet, index) => {
 
         // Draw Game State
 function draw() {
-    // Clear fireworks before drawing new frames
-    fireworks = fireworks.filter(firework => firework.timer > 0);
     // Clear Canvas
     ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    if (playerRespawning) {
-        // Existing respawn logic...
-    }
-
     if (gameState === 'start') {
-        // Existing start overlay logic...
-        return;
-    }
-
-    if (gameState === 'countdown') {
-        // Existing countdown logic...
+        // Draw start overlay
         return;
     }
 
     if (gameState === 'gameover') {
-        // The Game Over overlay handles the message, so no need to draw anything here
+        // Game Over overlay is handled separately
         return;
     }
 
-    if (gameState === 'playing') {
-        // Drawing game elements only when playing
+    // Draw game elements
+    if (gameState === 'playing' || gameState === 'paused') {
         // Draw Player
         drawPlayer();
 
@@ -1264,10 +1227,17 @@ function draw() {
             ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
         });
 
-        drawShields();          // Draw shields first
-        drawMotherships();      // Then motherships
-        drawExplosions();       // Then explosions
-        drawFireworks();        // Then fireworks
+        // Draw Shields
+        drawShields();
+
+        // Draw Motherships
+        drawMotherships();
+
+        // Draw Explosions
+        drawExplosions();
+
+        // Draw Fireworks
+        drawFireworks();
 
         // Draw Score and Lives
         const padding = 20; // Space from the edges
@@ -1283,20 +1253,21 @@ function draw() {
         ctx.textAlign = 'right';
         ctx.fillText(`LIVES: ${player.lives}/3`, GAME_WIDTH - padding, textHeight);
         ctx.textAlign = 'left';
-    }
 
-    // Handle 'paused' state separately to ensure the overlay is drawn
-    if (gameState === 'paused') {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
-        ctx.fillStyle = 'white';
-        ctx.font = isMobileDevice() ? '24px Arial' : '30px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
-        ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
-        ctx.textAlign = 'left';
+        // If the game is paused, draw the pause overlay
+        if (gameState === 'paused') {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
+            ctx.fillStyle = 'white';
+            ctx.font = isMobileDevice() ? '24px Arial' : '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
+            ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
+            ctx.textAlign = 'left';
+        }
     }
 }
+
 
 
         // Collision Detection
@@ -1334,89 +1305,74 @@ function draw() {
 
         // Reset Player After Hit
  
-    function resetPlayer() {
-        if (playerRespawning || player.isExploding) {
-            console.log('Player is already respawning or exploding.');
-            return;
-        }
+function resetPlayer() {
+    if (playerRespawning || player.isExploding) {
+        console.log('Player is already respawning or exploding.');
+        return;
+    }
 
-        console.log('Player hit! Starting respawn sequence.');
-        player.isExploding = true;
-        playerRespawning = true;
+    console.log('Player hit! Starting respawn sequence.');
+    player.isExploding = true;
+    playerRespawning = true;
 
-        // Decrement lives
-        if (player.lives > 0) {
-            player.lives--;
-            console.log(`Lives decremented: ${player.lives}`);
-        }
+    // Decrement lives
+    if (player.lives > 0) {
+        player.lives--;
+        console.log(`Lives decremented: ${player.lives}`);
+    }
 
-        // Check for Game Over
-        if (player.lives <= 0) {
-            console.log('No lives left. Game Over!');
-            showGameOver();
-            return;
-        }
+    // Trigger explosion
+    createExplosion(player.x + player.width / 2, player.y + player.height / 2);
+    explosionSound.currentTime = 0;
+    explosionSound.play();
 
-        // Trigger explosion
-        createExplosion(player.x + player.width / 2, player.y + player.height / 2);
-        explosionSound.currentTime = 0;
-        explosionSound.play();
+    // Disable enemy firing and clear existing enemy bullets
+    enemyFiringDisabled = true;
+    enemyBullets = [];
 
-        // Disable enemy firing and clear existing enemy bullets
-        enemyFiringDisabled = true;
-        enemyBullets = [];
+    // Define durations
+    const explosionDuration = 1200; // 1.2 seconds for explosion animation
+    const grayscaleDuration = 1000; // 1 second for grayscale effect
+    const pauseDuration = 3000;      // 3 seconds pause before next level
 
-        // Duration of the explosion animation (e.g., 0.5 seconds)
-        const explosionDuration = 500; // in milliseconds
-        const grayscaleDuration = 1000; // 1 second
+    // Sequence the events using nested setTimeouts
+    setTimeout(() => {
+        console.log('Applying grayscale filter.');
+        canvas.style.filter = 'grayscale(100%)'; // Apply grayscale
 
         setTimeout(() => {
-            console.log('Applying grayscale filter.');
-            canvas.style.filter = 'grayscale(100%)'; // Apply black and white filter
+            console.log('Pausing game before next level.');
 
-            // Duration of the grayscale effect
+            // Pause the game by setting gameState to 'paused'
+            gameState = 'paused';
+
             setTimeout(() => {
-                // Start the 3-second countdown before resuming the game
-                respawnCountdown = 3;
-                respawnStartTime = Date.now();
-                const countdownInterval = setInterval(() => {
-                    const elapsed = Date.now() - respawnStartTime;
-                    const remaining = 3 - Math.floor(elapsed / 1000);
-                    if (remaining >= 0) {
-                        respawnCountdown = remaining;
-                    }
-                    if (elapsed >= 3000) {
-                        clearInterval(countdownInterval);
-                        console.log('Resuming gameplay.');
+                console.log('Resuming game and starting next level.');
 
-                        // Reset player position
-                        player.x = GAME_WIDTH / 2 - playerWidth / 2;
-                        player.y = GAME_HEIGHT - playerHeight - 40;
+                // Remove grayscale filter
+                canvas.style.filter = 'none';
 
-                        // Remove respawning flags
-                        player.isExploding = false;
-                        playerRespawning = false;
+                // Reset player position
+                player.x = GAME_WIDTH / 2 - playerWidth / 2;
+                player.y = GAME_HEIGHT - playerHeight - 40;
 
-                        // Remove grayscale filter
-                        console.log('Removing grayscale filter.');
-                        canvas.style.filter = 'none'; // Revert to color
+                // Remove respawning flags
+                player.isExploding = false;
+                playerRespawning = false;
 
-                        // Re-enable enemy firing after 2 seconds
-                        setTimeout(() => {
-                            enemyFiringDisabled = false;
-                            console.log('Enemy firing re-enabled.');
-                        }, 2000); // 2000 milliseconds = 2 seconds
-                    }
-                }, 1000); // Changed from 1 ms to 1000 ms
+                // Re-enable enemy firing
+                enemyFiringDisabled = false;
 
-            }, grayscaleDuration);
+                // Start the next level
+                startNextLevel();
 
-        }, explosionDuration);
+            }, pauseDuration); // Wait before starting next level
 
-        // **Remove the immediate removal of the grayscale filter**
-        // console.log('Removing grayscale filter.');
-        // canvas.style.filter = 'none'; // Revert to color
-    }
+        }, grayscaleDuration); // Wait for grayscale to apply
+
+    }, explosionDuration); // Wait for explosion to complete
+}
+
 
 
         // Calculate Enemy Speed Based on the Number of Remaining Enemies
@@ -1476,16 +1432,17 @@ function spawnMothership() {
 }
 
         // Start Next Level
-    function startNextLevel() {
-        currentLevel++; 
-        stepDelay = 800; // Reset step delay to starting value
-        initEnemies(currentLevel); 
-        resetShields(); 
-        fireworks = []; 
-        adjustStepSpeed(); 
-        gameState = 'playing'; 
-        requestAnimationFrame(gameLoop); 
-    }
+function startNextLevel() {
+    currentLevel++; 
+    stepDelay = 800; // Reset step delay to starting value
+    initEnemies(currentLevel); 
+    resetShields(); 
+    fireworks = []; 
+    adjustStepSpeed(); 
+    gameState = 'playing'; 
+    gameLoop(); // Start the game loop for the next level
+}
+
 
         // Reset Shields to full integrity
         function resetShields() {
