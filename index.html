@@ -898,7 +898,7 @@ function update(deltaTime) {
 
         enemies.forEach(enemy => {
             if (enemy.alive) {
-                enemy.x += enemySpeed * (enemyWidth / 2) * enemyDirection;) // Half-step horizontal movement
+                enemy.x += (enemyWidth / 2) * enemyDirection; // Half-step horizontal movement
                 enemy.frame = 1 - enemy.frame; // Toggle frame for animation
 
                 if (enemy.x + enemy.width >= GAME_WIDTH - enemyPadding || enemy.x <= enemyPadding) {
