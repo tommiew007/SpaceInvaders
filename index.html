@@ -193,8 +193,8 @@
             new Audio('fastinvader4.wav')
         ];
         let currentInvaderSound = 0; // Tracks which sound to play
-        let stepDelay = 800; // Starting delay in milliseconds for step movement
         let lastStepTime = 0; // Tracks last step time
+        let lastInvaderSoundTime = 0;
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -239,8 +239,6 @@
         const enemyPadding = 15;
         let enemies = [];
         let enemyDirection = 1; // 1: right, -1: left
-        let enemySpeed = 1;
-        let initialEnemyCount = enemyRows * enemyCols;
 
         // Enemy Bullets
         const bulletWidth = 5;
@@ -275,6 +273,15 @@
         let currentLevel = 1;
         let countdownStartTime = null;
         const countdownDuration = 3000; // 3 seconds in ms
+        const ARCADE_INTERRUPT_HZ = 60;
+        const ARCADE_STARTING_ALIEN_COUNT = 55;
+        const ARCADE_SCREEN_WIDTH = 224;
+        const ARCADE_SCREEN_HEIGHT = 256;
+        const ARCADE_RACK_STEP_X = 2;
+        const ARCADE_LAST_ALIEN_RIGHT_STEP_X = 3;
+        const ARCADE_RACK_DROP_Y = 8;
+        const ARCADE_SOUND_ALIEN_THRESHOLDS = [50, 43, 36, 28, 22, 17, 13, 10, 8, 7, 6, 5, 4, 3, 2, 1];
+        const ARCADE_SOUND_DELAYS = [52, 46, 39, 34, 28, 24, 21, 19, 16, 14, 13, 12, 11, 9, 7, 5];
 
         // Colors for each enemy row
         const rowColors = ['red', 'orange', 'yellow', 'green', 'blue'];
@@ -410,6 +417,7 @@ function simulateMothershipHit() {
             const now = Date.now();
             lastUpdateTime = now;
             lastStepTime = now;
+            lastInvaderSoundTime = now;
         }
 
         function startGameLoop() {
@@ -491,6 +499,79 @@ function simulateMothershipHit() {
             player.y = Math.min(player.y, Math.max(0, gameHeight - player.height - 10));
         }
 
+        function getAliveEnemies() {
+            return enemies.filter(enemy => enemy.alive);
+        }
+
+        function calculateEnemyStepDelay() {
+            const remainingEnemies = getAliveEnemies().length;
+            if (remainingEnemies === 0) {
+                return Infinity;
+            }
+
+            const effectiveAlienCount = Math.min(remainingEnemies, ARCADE_STARTING_ALIEN_COUNT);
+            return (effectiveAlienCount / ARCADE_INTERRUPT_HZ) * 1000;
+        }
+
+        function getEnemyHorizontalStep() {
+            const scaleX = gameWidth / ARCADE_SCREEN_WIDTH;
+            const remainingEnemies = getAliveEnemies().length;
+            const arcadeStep = remainingEnemies === 1 && enemyDirection > 0
+                ? ARCADE_LAST_ALIEN_RIGHT_STEP_X
+                : ARCADE_RACK_STEP_X;
+
+            return arcadeStep * scaleX;
+        }
+
+        function getEnemyDropStep() {
+            return ARCADE_RACK_DROP_Y * (gameHeight / ARCADE_SCREEN_HEIGHT);
+        }
+
+        function getInvaderSoundDelay() {
+            const remainingEnemies = getAliveEnemies().length;
+            if (remainingEnemies === 0) {
+                return Infinity;
+            }
+
+            for (let i = 0; i < ARCADE_SOUND_ALIEN_THRESHOLDS.length; i++) {
+                if (remainingEnemies >= ARCADE_SOUND_ALIEN_THRESHOLDS[i]) {
+                    return (ARCADE_SOUND_DELAYS[i] / ARCADE_INTERRUPT_HZ) * 1000;
+                }
+            }
+
+            return (ARCADE_SOUND_DELAYS[ARCADE_SOUND_DELAYS.length - 1] / ARCADE_INTERRUPT_HZ) * 1000;
+        }
+
+        function updateExplosions() {
+            explosions.forEach((explosion, index) => {
+                explosion.x += explosion.vx;
+                explosion.y += explosion.vy;
+                explosion.vx *= 0.98;
+                explosion.vy *= 0.98;
+                explosion.size *= 0.95;
+                explosion.timer--;
+
+                if (explosion.timer <= 0 || explosion.size < 0.5) {
+                    explosions.splice(index, 1);
+                }
+            });
+        }
+
+        function updateFireworks() {
+            fireworks.forEach((firework, index) => {
+                firework.timer--;
+                firework.particles.forEach((particle) => {
+                    particle.x += particle.vx;
+                    particle.y += particle.vy;
+                    particle.vy += particle.gravity;
+                });
+
+                if (firework.timer <= 0) {
+                    fireworks.splice(index, 1);
+                }
+            });
+        }
+
         function togglePause() {
             if (gameState === 'playing') {
                 pauseGame();
@@ -548,7 +629,6 @@ function simulateMothershipHit() {
                 }
             });
 
-            adjustEnemySpeed(); // Recalculate enemy speed based on zero remaining
             enemyHitSound.currentTime = 0;
             enemyHitSound.play();
 
@@ -603,8 +683,6 @@ function simulateMothershipHit() {
             }
 
             enemyDirection = 1; // Reset direction
-            enemySpeed = 1;     // Reset speed
-            initialEnemyCount = enemyRows * enemyCols;
         }
 
 
@@ -849,8 +927,8 @@ function gameLoop() {
     const deltaTime = (now - lastUpdateTime) / 1000; // Time elapsed in seconds
     lastUpdateTime = now; // Update the time tracker
 
-    if (gameState === 'playing') {
-        update(deltaTime); // Always update game logic when playing
+    if (gameState !== 'start' && gameState !== 'gameover') {
+        update(deltaTime);
     }
 
     draw(); // Always draw the current state
@@ -867,30 +945,18 @@ function update(deltaTime) {
     }
 
     if (gameState === 'paused') {
-        // Only update visual effects like explosions
         if (playerRespawning) {
-            // Update explosions
-            explosions.forEach((explosion, index) => {
-                explosion.x += explosion.vx;
-                explosion.y += explosion.vy;
-                explosion.vx *= 0.98; // Apply friction
-                explosion.vy *= 0.98;
-                explosion.size *= 0.95; // Shrink explosion
-                explosion.timer--;
-
-                // Remove explosion particle if its timer expires or it becomes too small
-                if (explosion.timer <= 0 || explosion.size < 0.5) {
-                    explosions.splice(index, 1);
-                }
-            });
-
-            // No further updates during pause
+            updateExplosions();
         }
+
+        updateFireworks();
 
         return; // Skip the rest of the update during pause
     }
 
     if (gameState === 'countdown') {
+        updateExplosions();
+        updateFireworks();
         const elapsed = Date.now() - countdownStartTime;
 
         // Transition to next level after countdown
@@ -947,7 +1013,6 @@ function update(deltaTime) {
                     player.bullets.splice(index, 1);
                     score += 10;
                     createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
-                    adjustEnemySpeed();
                     hit = true;
                 }
             });
@@ -994,17 +1059,17 @@ function update(deltaTime) {
         }
     });
 
-    // Calculate and adjust enemy speed
-    enemySpeed = calculateEnemySpeed();
+    const now = Date.now();
+    const currentStepDelay = calculateEnemyStepDelay();
 
     // Move enemies in 'step' fashion
-    const now = Date.now();
-    if (now - lastStepTime > stepDelay) {
+    if (now - lastStepTime > currentStepDelay) {
         let shouldMoveDown = false;
+        const horizontalStep = getEnemyHorizontalStep();
 
         enemies.forEach(enemy => {
             if (enemy.alive) {
-                enemy.x += (enemyWidth / 2) * enemyDirection; // Half-step horizontal movement
+                enemy.x += horizontalStep * enemyDirection;
                 enemy.frame = 1 - enemy.frame; // Toggle frame for animation
 
                 if (enemy.x + enemy.width >= gameWidth - enemyPadding || enemy.x <= enemyPadding) {
@@ -1017,18 +1082,19 @@ function update(deltaTime) {
             enemyDirection *= -1;
             enemies.forEach(enemy => {
                 if (enemy.alive) {
-                    enemy.y += enemyHeight / 2; // Half-step vertical movement
+                    enemy.y += getEnemyDropStep();
                 }
             });
         }
 
-        // Play step sound and cycle
-        invaderSounds[currentInvaderSound].currentTime = 0;
-        invaderSounds[currentInvaderSound].play();
-        currentInvaderSound = (currentInvaderSound + 1) % invaderSounds.length;
+        if (now - lastInvaderSoundTime >= getInvaderSoundDelay()) {
+            invaderSounds[currentInvaderSound].currentTime = 0;
+            invaderSounds[currentInvaderSound].play();
+            currentInvaderSound = (currentInvaderSound + 1) % invaderSounds.length;
+            lastInvaderSoundTime = now;
+        }
 
         lastStepTime = now;
-        adjustEnemySpeed(); // Update speed based on enemies
     }
 
     // Check collision between enemies and shields
@@ -1051,7 +1117,7 @@ function update(deltaTime) {
 
     // Fire enemy bullets
     if (!enemyFiringDisabled && Math.random() < 0.005) { // Adjusted firing frequency
-        const aliveEnemies = enemies.filter(e => e.alive);
+    const aliveEnemies = getAliveEnemies();
         if (aliveEnemies.length > 0) {
             const shooter = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
             enemyBullets.push({
@@ -1141,39 +1207,8 @@ function update(deltaTime) {
         lastMothershipTime = Date.now();
     }
 
-    // Update Explosions
-    explosions.forEach((explosion, index) => {
-        explosion.x += explosion.vx; // Move horizontally
-        explosion.y += explosion.vy; // Move vertically
-
-        // Apply slight slowdown effect (friction)
-        explosion.vx *= 0.98;
-        explosion.vy *= 0.98;
-
-        // Gradually shrink particle size
-        explosion.size *= 0.95;
-
-        // Reduce timer
-        explosion.timer--;
-
-        // Remove particles when their timer expires or they become too small
-        if (explosion.timer <= 0 || explosion.size < 0.5) {
-            explosions.splice(index, 1);
-        }
-    });
-
-    // Update Fireworks
-    fireworks.forEach((firework, index) => {
-        firework.timer--;
-        firework.particles.forEach((particle) => {
-            particle.x += particle.vx;
-            particle.y += particle.vy;
-            particle.vy += particle.gravity;
-        });
-        if (firework.timer <= 0) {
-            fireworks.splice(index, 1);
-        }
-    });
+    updateExplosions();
+    updateFireworks();
 
     // Check Win Condition
     if (enemies.every(e => !e.alive)) {
@@ -1189,23 +1224,6 @@ function update(deltaTime) {
         }
     });
 }
-
-    function adjustStepSpeed() {
-        const remainingEnemies = enemies.filter(enemy => enemy.alive).length;
-        const totalEnemies = enemyRows * enemyCols;
-
-        if (remainingEnemies === 1) {
-            stepDelay = 200 / 3; // 200% faster for the last enemy
-        } else if (remainingEnemies <= totalEnemies / 4) {
-            stepDelay = 300 * 0.8; // Speed 3 increased by 20%
-        } else if (remainingEnemies <= totalEnemies / 2) {
-            stepDelay = 500; // Speed 2 unchanged
-        } else if (remainingEnemies <= (3 * totalEnemies) / 4) {
-            stepDelay = 650; // Speed 1 unchanged
-        } else {
-            stepDelay = 800; // Starting speed
-        }
-    }
 
     function drawEnemies() {
         enemies.forEach(enemy => {
@@ -1299,7 +1317,7 @@ function draw() {
     }
 
     // Draw game elements
-    if (gameState === 'playing' || gameState === 'paused') {
+    if (gameState === 'playing' || gameState === 'paused' || gameState === 'countdown') {
         // Draw Player
         drawPlayer();
 
@@ -1354,6 +1372,21 @@ function draw() {
             ctx.textAlign = 'center';
             ctx.fillText('Paused', gameWidth / 2, gameHeight / 2 - 20);
             ctx.fillText('Press P to Resume', gameWidth / 2, gameHeight / 2 + 20);
+            ctx.textAlign = 'left';
+        }
+
+        if (gameState === 'countdown') {
+            const secondsRemaining = countdownStartTime
+                ? Math.max(1, Math.ceil((countdownDuration - (Date.now() - countdownStartTime)) / 1000))
+                : 1;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(gameWidth / 2 - 210, gameHeight / 2 - 85, 420, 170);
+            ctx.fillStyle = '#00FF00';
+            ctx.font = isMobileDevice() ? '22px "Press Start 2P"' : '28px "Press Start 2P"';
+            ctx.textAlign = 'center';
+            ctx.fillText(`WAVE ${currentLevel} CLEARED`, gameWidth / 2, gameHeight / 2 - 18);
+            ctx.font = isMobileDevice() ? '16px "Press Start 2P"' : '18px "Press Start 2P"';
+            ctx.fillText(`NEXT WAVE ${secondsRemaining}`, gameWidth / 2, gameHeight / 2 + 26);
             ctx.textAlign = 'left';
         }
     }
@@ -1469,28 +1502,6 @@ function resetPlayer() {
 
     }, explosionDuration); // Wait for explosion to complete
 }
-
-
-
-        // Calculate Enemy Speed Based on the Number of Remaining Enemies
-    // Calculate Enemy Speed Based on the Number of Remaining Enemies
-    function calculateEnemySpeed() {
-        const remainingEnemies = enemies.filter(enemy => enemy.alive).length;
-        if (remainingEnemies === 0) return 1; // Default speed when no enemies
-
-        // Calculate speed based on remaining enemies
-        // When remainingEnemies = initialEnemyCount => speed = 1
-        // When remainingEnemies = 1 => speed = 8
-        let speed = 1 + (7 * (initialEnemyCount - remainingEnemies)) / (initialEnemyCount - 1);
-        speed = Math.min(speed, 8); // Ensure speed does not exceed 8
-        return speed;
-    }
-
-        // Adjust Enemy Speed Based on the Number of Remaining Enemies
-        function adjustEnemySpeed() {
-            enemySpeed = calculateEnemySpeed();
-        }
-
         // Spawn Mothership
 function spawnMothership() {
     // Check if a mothership is already active
@@ -1531,7 +1542,6 @@ function spawnMothership() {
         // Start Next Level
 function startNextLevel() {
     currentLevel++; 
-    stepDelay = 800; // Reset step delay to starting value
     initEnemies(currentLevel); 
     resetShields(); 
     player.bullets = [];
@@ -1544,7 +1554,7 @@ function startNextLevel() {
     stopActiveMothershipSounds();
     motherships = [];
     lastMothershipTime = Date.now();
-    adjustStepSpeed(); 
+    countdownStartTime = null;
     syncGameTimers();
     gameState = 'playing'; 
 }
