@@ -14,8 +14,6 @@
     <meta name="twitter:image" content="preview.png">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <!-- Rest of your head content -->
-</head>
-
     <style>
         body {
             margin: 0;
@@ -206,8 +204,9 @@
         const startOverlay = document.getElementById('startOverlay');
         const directionsOverlay = document.getElementById('directionsOverlay');
 
-        const GAME_WIDTH = canvas.width;
-        const GAME_HEIGHT = canvas.height;
+        let gameWidth = canvas.width;
+        let gameHeight = canvas.height;
+        let animationFrameId = null;
 
         let keys = {};
         let gameState = 'start'; // 'start', 'playing', 'paused', 'countdown', 'gameover'
@@ -258,8 +257,9 @@
         const shieldWidth = 100 * SCALE;
         const shieldHeight = 50 * SCALE;
         const shieldCount = 4;
-        const shieldSpacing = (GAME_WIDTH - (shieldCount * shieldWidth)) / (shieldCount + 1);
+        let shieldSpacing = 0;
         let shields = [];
+        let player;
 
         // Explosion Effects
         let explosions = [];
@@ -305,31 +305,37 @@
 			score = 0;
 			currentLevel = 1;
 			gameOver = false;
+            countdownStartTime = null;
+            playerRespawning = false;
+            enemyFiringDisabled = false;
 			
 			// Reset canvas filter
 			canvas.style.filter = 'none';
 			
 			// Hide the Game Over overlay
 			document.getElementById('gameOverOverlay').classList.add('hidden');
+            directionsOverlay.classList.add('hidden');
 			
 			// Re-initialize enemies, shields, etc.
 			initEnemies(currentLevel);
-			resetShields();
-			
-			// Reset player
-			player.x = GAME_WIDTH / 2 - playerWidth / 2;
-			player.y = GAME_HEIGHT - playerHeight - 40;
-			player.lives = 3;
+			initShields();
 			
 			// Reset other game elements as needed
 			enemyBullets = [];
+            if (player) {
+                player.bullets = [];
+                player.lives = 3;
+                player.isExploding = false;
+            }
 			fireworks = [];
 			explosions = [];
+            stopActiveMothershipSounds();
 			motherships = [];
+            lastMothershipTime = Date.now();
 			
 			// Start the game loop
 			gameState = 'playing';
-			gameLoop();
+			startGameLoop();
 		}
 
         function createFireworks() {
@@ -338,7 +344,7 @@
             for (let i = 0; i < 100; i++) {
                 fireworks.push({
                     particles: Array.from({ length: 20 }).map(() => ({
-                        x: Math.random() * GAME_WIDTH,
+                        x: Math.random() * gameWidth,
                         y: Math.random() * 200,
                         size: Math.random() * 3 + 2,
                         color: `hsl(${Math.random() * 360}, 100%, 50%)`,
@@ -396,19 +402,104 @@ function simulateMothershipHit() {
 }
 
 
+        function updateCanvasMetrics() {
+            gameWidth = canvas.width;
+            gameHeight = canvas.height;
+            shieldSpacing = (gameWidth - (shieldCount * shieldWidth)) / (shieldCount + 1);
+        }
+
+        function syncGameTimers() {
+            const now = Date.now();
+            lastUpdateTime = now;
+            lastStepTime = now;
+        }
+
+        function startGameLoop() {
+            if (animationFrameId === null && !gameOver) {
+                syncGameTimers();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function stopGameLoop() {
+            if (animationFrameId !== null) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+        }
+
+        function pauseActiveMothershipSounds() {
+            motherships.forEach(mothership => {
+                if (mothership.alive) {
+                    mothership.sound.pause();
+                }
+            });
+        }
+
+        function resumeActiveMothershipSounds() {
+            motherships.forEach(mothership => {
+                if (mothership.alive) {
+                    mothership.sound.play().catch(() => {});
+                }
+            });
+        }
+
+        function stopActiveMothershipSounds() {
+            motherships.forEach(mothership => {
+                mothership.sound.pause();
+                mothership.sound.currentTime = 0;
+            });
+        }
+
+        function layoutShields() {
+            const shieldY = gameHeight - playerHeight - shieldHeight - 50;
+            shields.forEach((shield, index) => {
+                shield.x = shieldSpacing + index * (shieldWidth + shieldSpacing);
+                shield.y = shieldY;
+                shield.width = shieldWidth;
+                shield.height = shieldHeight;
+            });
+        }
+
+        function getPlayerSpawnPosition() {
+            const middleShield = shields[Math.floor(shields.length / 2)];
+            const spawnX = middleShield
+                ? middleShield.x + middleShield.width / 2 - playerWidth / 2
+                : gameWidth / 2 - playerWidth / 2;
+            const spawnY = middleShield
+                ? middleShield.y + shieldHeight + 40
+                : gameHeight - playerHeight - 40;
+
+            return {
+                x: Math.min(Math.max(spawnX, 0), Math.max(0, gameWidth - playerWidth)),
+                y: Math.min(spawnY, Math.max(0, gameHeight - playerHeight - 10))
+            };
+        }
+
+        function placePlayerAtSpawn() {
+            if (!player) return;
+
+            const spawn = getPlayerSpawnPosition();
+            player.x = spawn.x;
+            player.y = spawn.y;
+            player.width = playerWidth;
+            player.height = playerHeight;
+        }
+
+        function clampPlayerToCanvas() {
+            if (!player) return;
+
+            player.x = Math.min(Math.max(player.x, 0), Math.max(0, gameWidth - player.width));
+            player.y = Math.min(player.y, Math.max(0, gameHeight - player.height - 10));
+        }
+
         function togglePause() {
             if (gameState === 'playing') {
                 pauseGame();
-                // Pause mothership sound if playing
-                if (isMothershipSoundPlaying) {
-                    mothershipAppearSound.pause();
-                }
+                pauseActiveMothershipSounds();
             } else if (gameState === 'paused') {
                 resumeGame();
-                // Resume mothership sound if applicable
-                if (isMothershipSoundPlaying) {
-                    mothershipAppearSound.play();
-                }
+                resumeActiveMothershipSounds();
             }
         }
         function handleStart() {
@@ -434,6 +525,16 @@ function simulateMothershipHit() {
             } else {
                 canvas.width = 800;
                 canvas.height = 600;
+            }
+
+            updateCanvasMetrics();
+
+            if (shields.length > 0) {
+                layoutShields();
+            }
+            if (player) {
+                player.y = getPlayerSpawnPosition().y;
+                clampPlayerToCanvas();
             }
         }
         resizeCanvas();
@@ -513,22 +614,20 @@ function simulateMothershipHit() {
         function initShields() {
             shields = [];
             for (let i = 0; i < shieldCount; i++) {
-                let shieldX = shieldSpacing + i * (shieldWidth + shieldSpacing);
-                let shieldY = GAME_HEIGHT - playerHeight - shieldHeight - 50;
                 shields.push({
-                    x: shieldX,
-                    y: shieldY,
+                    x: 0,
+                    y: 0,
                     width: shieldWidth,
                     height: shieldHeight,
                     segments: createShieldSegments(shieldWidth, shieldHeight) // Custom layout
                 });
             }
 
-            // Initialize player after shields are set
-            let middleShield = shields[Math.floor(shields.length / 2)]; // Get the middle shield
+            layoutShields();
+
             player = {
-                x: middleShield.x + middleShield.width / 2 - playerWidth / 2, // Centered under the middle shield
-                y: middleShield.y + shieldHeight + 40, // 30 pixels below shield level
+                x: 0,
+                y: 0,
                 width: playerWidth,
                 height: playerHeight,
                 speed: 200,
@@ -538,6 +637,7 @@ function simulateMothershipHit() {
                 isExploding: false,
                 explosionTimer: 0
             };
+            placePlayerAtSpawn();
         }
 
         // Create shield segments as a grid
@@ -646,17 +746,20 @@ function toggleDirections() {
     const directionsOverlay = document.getElementById('directionsOverlay');
     if (directionsOverlay.classList.contains('hidden')) {
         directionsOverlay.classList.remove('hidden');
-        gameState = 'paused'; // Pause the game when help is shown
+        pauseGame();
+        pauseActiveMothershipSounds();
     } else {
         directionsOverlay.classList.add('hidden');
-        gameState = 'playing'; // Resume the game when help is hidden
+        if (!gameOver) {
+            resumeGame();
+            resumeActiveMothershipSounds();
+        }
     }
 }
 
         function startGame() {
             startOverlay.classList.add('hidden');
             gameState = 'playing';
-            gameLoop();
         }
 
         function pauseGame() {
@@ -665,28 +768,24 @@ function toggleDirections() {
 
         function resumeGame() {
             gameState = 'playing';
-            gameLoop();
-        }
-
-        function togglePause() {
-            if (gameState === 'playing') {
-                pauseGame();
-            } else if (gameState === 'paused') {
-                resumeGame();
-            }
         }
 
         function endGame() {
             const confirmEnd = confirm('Are you sure you want to end the game?');
             if (confirmEnd) {
-                gameState = 'gameover';
                 showGameOver();
             }
         }
 
 function showGameOver() {
+    if (gameOver) return;
+
+    gameOver = true;
     gameOverSound.play();
     gameState = 'gameover';
+    stopGameLoop();
+    stopActiveMothershipSounds();
+    directionsOverlay.classList.add('hidden');
 
     // Apply grayscale filter if not already applied
     if (!canvas.style.filter.includes('grayscale')) {
@@ -739,6 +838,7 @@ function showGameOver() {
 
         // Game Loop
 function gameLoop() {
+    animationFrameId = null;
     const now = Date.now();
     const deltaTime = (now - lastUpdateTime) / 1000; // Time elapsed in seconds
     lastUpdateTime = now; // Update the time tracker
@@ -750,7 +850,7 @@ function gameLoop() {
     draw(); // Always draw the current state
 
     if (!gameOver) {
-        requestAnimationFrame(gameLoop);
+        animationFrameId = requestAnimationFrame(gameLoop);
     }
 }
         // Update Game State
@@ -800,7 +900,7 @@ function update(deltaTime) {
     if (keys['ArrowLeft'] && player.x > 0) {
         player.x -= player.speed * deltaTime;
     }
-    if (keys['ArrowRight'] && player.x + playerWidth < GAME_WIDTH) {
+    if (keys['ArrowRight'] && player.x + playerWidth < gameWidth) {
         player.x += player.speed * deltaTime;
     }
 
@@ -901,7 +1001,7 @@ function update(deltaTime) {
                 enemy.x += (enemyWidth / 2) * enemyDirection; // Half-step horizontal movement
                 enemy.frame = 1 - enemy.frame; // Toggle frame for animation
 
-                if (enemy.x + enemy.width >= GAME_WIDTH - enemyPadding || enemy.x <= enemyPadding) {
+                if (enemy.x + enemy.width >= gameWidth - enemyPadding || enemy.x <= enemyPadding) {
                     shouldMoveDown = true;
                 }
             }
@@ -963,7 +1063,7 @@ function update(deltaTime) {
         bullet.y += bulletSpeed * deltaTime * 60; // Scale speed appropriately
 
         // Remove bullet if it goes off-screen
-        if (bullet.y > GAME_HEIGHT) {
+        if (bullet.y > gameHeight) {
             enemyBullets.splice(index, 1);
         } else {
             let hit = false;
@@ -993,10 +1093,10 @@ function update(deltaTime) {
                 playerHitSound.play();
                 createExplosion(player.x + player.width / 2, player.y + player.height / 2);
                  
-                if (player.lives > 0) {
+                if (player.lives > 1) {
                     resetPlayer();
                 } else {
-                    gameOver = true;
+                    player.lives = 0;
                     showGameOver();
                 }
             }
@@ -1009,7 +1109,7 @@ function update(deltaTime) {
             mothership.x += mothership.speed;
 
             // Stop sound and remove mothership if it leaves the screen
-            if ((mothership.direction === 'right' && mothership.x > GAME_WIDTH) ||
+            if ((mothership.direction === 'right' && mothership.x > gameWidth) ||
                 (mothership.direction === 'left' && mothership.x + mothership.width < 0)) {
                 mothership.alive = false;
                 mothership.sound.pause();
@@ -1079,7 +1179,6 @@ function update(deltaTime) {
     // Check if any enemy has reached the player's level
     enemies.forEach(enemy => {
         if (enemy.alive && enemy.y + enemy.height >= player.y) {
-            gameOver = true;
             showGameOver();
         }
     });
@@ -1195,7 +1294,7 @@ function drawPlayer() {
         // Draw Game State
 function draw() {
     // Clear Canvas
-    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    ctx.clearRect(0, 0, gameWidth, gameHeight);
 
     if (gameState === 'start') {
         // Draw start overlay
@@ -1251,18 +1350,18 @@ function draw() {
 
         // Draw Player Lives (Top Right)
         ctx.textAlign = 'right';
-        ctx.fillText(`LIVES: ${player.lives}/3`, GAME_WIDTH - padding, textHeight);
+        ctx.fillText(`LIVES: ${player.lives}/3`, gameWidth - padding, textHeight);
         ctx.textAlign = 'left';
 
         // If the game is paused, draw the pause overlay
         if (gameState === 'paused') {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(GAME_WIDTH / 2 - 150, GAME_HEIGHT / 2 - 75, 300, 150);
+            ctx.fillRect(gameWidth / 2 - 150, gameHeight / 2 - 75, 300, 150);
             ctx.fillStyle = 'white';
             ctx.font = isMobileDevice() ? '24px Arial' : '30px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('Paused', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
-            ctx.fillText('Press Spacebar to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
+            ctx.fillText('Paused', gameWidth / 2, gameHeight / 2 - 20);
+            ctx.fillText('Press Spacebar to Resume', gameWidth / 2, gameHeight / 2 + 20);
             ctx.textAlign = 'left';
         }
     }
@@ -1333,28 +1432,32 @@ function resetPlayer() {
     // Define durations
     const explosionDuration = 1200; // 1.2 seconds for explosion animation
     const grayscaleDuration = 1000; // 1 second for grayscale effect
-    const pauseDuration = 3000;      // 3 seconds pause before next level
+    const pauseDuration = 3000;      // 3 seconds pause before resuming
 
     // Sequence the events using nested setTimeouts
     setTimeout(() => {
+        if (gameOver) return;
         console.log('Applying grayscale filter.');
         canvas.style.filter = 'grayscale(100%)'; // Apply grayscale
 
         setTimeout(() => {
-            console.log('Pausing game before next level.');
+            if (gameOver) return;
+            console.log('Pausing game before respawn.');
 
             // Pause the game by setting gameState to 'paused'
             gameState = 'paused';
+            pauseActiveMothershipSounds();
 
             setTimeout(() => {
-                console.log('Resuming game and starting next level.');
+                if (gameOver) return;
+                console.log('Resuming game after respawn.');
 
                 // Remove grayscale filter
                 canvas.style.filter = 'none';
 
                 // Reset player position
-                player.x = GAME_WIDTH / 2 - playerWidth / 2;
-                player.y = GAME_HEIGHT - playerHeight - 40;
+                placePlayerAtSpawn();
+                player.bullets = [];
 
                 // Remove respawning flags
                 player.isExploding = false;
@@ -1362,11 +1465,13 @@ function resetPlayer() {
 
                 // Re-enable enemy firing
                 enemyFiringDisabled = false;
+                syncGameTimers();
+                resumeActiveMothershipSounds();
 
-                // Start the next level
-                startNextLevel();
+                // Resume the current wave
+                gameState = 'playing';
 
-            }, pauseDuration); // Wait before starting next level
+            }, pauseDuration); // Wait before resuming play
 
         }, grayscaleDuration); // Wait for grayscale to apply
 
@@ -1410,7 +1515,7 @@ function spawnMothership() {
     const selectedSound = isFast ? mothershipFastSound : mothershipSlowSound;
 
     const mothership = {
-        x: direction === 'right' ? -80 : GAME_WIDTH,
+        x: direction === 'right' ? -80 : gameWidth,
         y: 30,
         width: 80,
         height: 20,
@@ -1437,15 +1542,25 @@ function startNextLevel() {
     stepDelay = 800; // Reset step delay to starting value
     initEnemies(currentLevel); 
     resetShields(); 
+    player.bullets = [];
+    enemyBullets = [];
     fireworks = []; 
+    player.isExploding = false;
+    playerRespawning = false;
+    enemyFiringDisabled = false;
+    placePlayerAtSpawn();
+    stopActiveMothershipSounds();
+    motherships = [];
+    lastMothershipTime = Date.now();
     adjustStepSpeed(); 
+    syncGameTimers();
     gameState = 'playing'; 
-    gameLoop(); // Start the game loop for the next level
 }
 
 
         // Reset Shields to full integrity
         function resetShields() {
+            layoutShields();
             shields.forEach(shield => {
                 shield.segments.forEach(segment => {
                     segment.intact = true;
@@ -1454,7 +1569,7 @@ function startNextLevel() {
         }
 
         // Initialize Game Loop and Draw Loop
-        gameLoop();
+        startGameLoop();
     </script>
 <a href="https://linktr.ee/tomwellborn3" target="_blank" 
    style="position: absolute; bottom: 10px; left: 10px; color: gray; font-size: 12px; text-decoration: none;">
