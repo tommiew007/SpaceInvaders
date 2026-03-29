@@ -109,8 +109,9 @@
         <h2>Controls</h2>
         <p>←: Move Left</p>
         <p>→: Move Right</p>
-        <p><strong>Ctrl</strong>: Fire</p>
-        <p><strong>Spacebar</strong>: Pause/Unpause</p>
+        <p><strong>Spacebar</strong>: Fire</p>
+        <p><strong>P</strong>: Pause/Unpause</p>
+        <p><strong>L</strong>: Reset Player</p>
         <p><strong>H</strong>: Instructions (also pauses the game)</p>
         <p><strong>Esc</strong>: End Game</p>
         <button onclick="toggleDirections()">Close</button>
@@ -139,9 +140,6 @@
         playerImage.src = 'play@2x.gif'; // Preload player image
 
         const retroFont = '24px "Press Start 2P"';
-        const shieldImage = new Image();
-        shieldImage.src = 'shield@2a.png'; // Replace with the actual path to your shield image
-
 		// Preload mothership sounds
 		const mothershipSlowSound = new Audio('ufo_lowpitch.wav');
 		mothershipSlowSound.loop = true; // Enable looping
@@ -640,42 +638,38 @@ function simulateMothershipHit() {
             placePlayerAtSpawn();
         }
 
-        // Create shield segments as a grid
+        // Build a classic bunker silhouette with a center notch.
         function createShieldSegments(width, height) {
-            let segments = [];
-            const topRows = 2; // Top two rows
-            const bottomRows = 3; // Bottom three rows
-            const topCols = 2; // 2 columns for top rows
-            const bottomCols = 4; // 4 columns for bottom rows
+            const mask = [
+                '001111111100',
+                '011111111110',
+                '111111111111',
+                '111111111111',
+                '111111111111',
+                '111100001111',
+                '111000000111',
+                '111000000111'
+            ];
+            const columns = mask[0].length;
+            const rows = mask.length;
+            const cellWidth = width / columns;
+            const cellHeight = height / rows;
+            const gap = Math.max(1, Math.floor(Math.min(cellWidth, cellHeight) * 0.12));
+            const segments = [];
 
-            const segmentWidth = width / bottomCols; // Base segment width for 4 columns
-            const segmentHeight = height / (topRows + bottomRows); // Divide total height into 5 rows
-
-            // Create top rows (2x2)
-            for (let r = 0; r < topRows; r++) {
-                for (let c = 0; c < topCols; c++) {
-                    segments.push({
-                        x: (bottomCols / 2 - topCols / 2) * segmentWidth + c * segmentWidth, // Centered 2 columns
-                        y: r * segmentHeight,
-                        width: segmentWidth,
-                        height: segmentHeight,
-                        intact: true,
-                    });
-                }
-            }
-
-            // Create bottom rows (4x3)
-            for (let r = 0; r < bottomRows; r++) {
-                for (let c = 0; c < bottomCols; c++) {
-                    segments.push({
-                        x: c * segmentWidth, // Spread across full width
-                        y: topRows * segmentHeight + r * segmentHeight, // Offset below top rows
-                        width: segmentWidth,
-                        height: segmentHeight,
-                        intact: true,
-                    });
-                }
-            }
+            mask.forEach((rowMask, rowIndex) => {
+                [...rowMask].forEach((cell, columnIndex) => {
+                    if (cell === '1') {
+                        segments.push({
+                            x: columnIndex * cellWidth,
+                            y: rowIndex * cellHeight,
+                            width: cellWidth - gap,
+                            height: cellHeight - gap,
+                            intact: true,
+                        });
+                    }
+                });
+            });
 
             return segments;
         }
@@ -687,6 +681,10 @@ function simulateMothershipHit() {
         // Event Listeners
 
         document.addEventListener('keydown', (e) => {
+            if (['ArrowLeft', 'ArrowRight', 'Space', 'KeyP'].includes(e.code)) {
+                e.preventDefault();
+            }
+
             if (e.ctrlKey && e.code === 'KeyB') {
                 destroyAllAliens(); // Feature: Destroy all aliens
                 return; // Prevent further processing
@@ -702,14 +700,18 @@ function simulateMothershipHit() {
                         startGame();
                         return;
                     }
-                    if (gameState === 'playing' || gameState === 'paused') {
-                        togglePause();
-                        return;
-                    }
                 }
             }
 
-            if (e.code === 'KeyP') {
+            if (e.code === 'KeyP' && (gameState === 'playing' || gameState === 'paused')) {
+                if (!keys['PausePressed']) {
+                    keys['PausePressed'] = true;
+                    togglePause();
+                }
+                return;
+            }
+
+            if (e.code === 'KeyL') {
                 resetPlayer();
             }
 
@@ -732,14 +734,18 @@ function simulateMothershipHit() {
         }
 
         document.addEventListener('keyup', (e) => {
+            if (['ArrowLeft', 'ArrowRight', 'Space', 'KeyP'].includes(e.code)) {
+                e.preventDefault();
+            }
+
             if (e.code === 'Space') {
                 spacePressed = false;
+                keys['SpaceFired'] = false;
             }
             keys[e.code] = false;
         
-            // Reset fired flag for firing keys
-            if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
-                keys['ControlFired'] = false;
+            if (e.code === 'KeyP') {
+                keys['PausePressed'] = false;
             }
         });
 function toggleDirections() {
@@ -906,8 +912,8 @@ function update(deltaTime) {
 
     // Fire player bullets
     if (
-        (keys['ControlLeft'] || keys['ControlRight']) && // Fire button pressed
-        !keys['ControlFired'] &&                        // Not already firing
+        keys['Space'] &&                                // Fire button pressed
+        !keys['SpaceFired'] &&                          // Not already firing
         player.bullets.length < 3                       // Bullet count limit
     ) {
         player.bullets.push({
@@ -919,7 +925,7 @@ function update(deltaTime) {
         });
         fireSound.currentTime = 0;
         fireSound.play();
-        keys['ControlFired'] = true; // Prevent rapid fire
+        keys['SpaceFired'] = true; // Prevent rapid fire
     }
 
     // Update player bullets
@@ -1260,23 +1266,9 @@ function drawPlayer() {
         shields.forEach(shield => {
             shield.segments.forEach(segment => {
                 if (segment.intact) {
-                    // Draw the shield segment using the shieldImage
-                    if (shieldImage.complete && shieldImage.naturalHeight !== 0) {
-                        ctx.drawImage(
-                            shieldImage, // Source image
-                            shield.x + segment.x, // X position
-                            shield.y + segment.y, // Y position
-                            segment.width, // Width
-                            segment.height // Height
-                        );
-                    } else {
-                        // Fallback if image isn't loaded
-                        ctx.fillStyle = 'green';
-                        ctx.fillRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
-                    }
+                    ctx.fillStyle = '#5CFF5C';
+                    ctx.fillRect(shield.x + segment.x, shield.y + segment.y, segment.width, segment.height);
                 }
-                // **Remove the else block to prevent clearing shield segments programmatically**
-                // Else: Do not draw anything, allowing invaders to pass through
             });
         });
     }
@@ -1361,7 +1353,7 @@ function draw() {
             ctx.font = isMobileDevice() ? '24px Arial' : '30px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('Paused', gameWidth / 2, gameHeight / 2 - 20);
-            ctx.fillText('Press Spacebar to Resume', gameWidth / 2, gameHeight / 2 + 20);
+            ctx.fillText('Press P to Resume', gameWidth / 2, gameHeight / 2 + 20);
             ctx.textAlign = 'left';
         }
     }
